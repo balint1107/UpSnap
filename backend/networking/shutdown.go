@@ -15,6 +15,9 @@ import (
 )
 
 func ShutdownDevice(app core.App, device *core.Record, trigger string) error {
+	if device.GetBool("reboot_only") {
+		return fmt.Errorf("suspend is disabled for this reboot-only host")
+	}
 	log := logging.Logger(app)
 	log.Info("Shutdown triggered", "device", device.GetString("name"), "trigger", trigger)
 	shutdown_cmd := device.GetString("shutdown_cmd")
@@ -79,7 +82,7 @@ func ShutdownDevice(app core.App, device *core.Record, trigger string) error {
 				return fmt.Errorf("%s", stderr.String())
 			} else {
 				for {
-					isOnline, err := PingDevice(device)
+					isOnline, err := PingDeviceNetwork(device)
 					if err != nil {
 						log.Error("Failed to ping device during shutdown", "error", err)
 						return err
@@ -96,7 +99,7 @@ func ShutdownDevice(app core.App, device *core.Record, trigger string) error {
 				}
 			}
 		default:
-			isOnline, err := PingDevice(device)
+			isOnline, err := PingDeviceNetwork(device)
 			if err != nil {
 				log.Error("Failed to ping device during shutdown", "error", err)
 				return err

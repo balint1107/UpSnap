@@ -15,6 +15,9 @@ import (
 )
 
 func WakeDevice(app core.App, device *core.Record, trigger string) error {
+	if device.GetBool("reboot_only") {
+		return fmt.Errorf("wake is disabled for this reboot-only host")
+	}
 	log := logging.Logger(app)
 	log.Info("Wake triggered", "device", device.GetString("name"), "trigger", trigger)
 

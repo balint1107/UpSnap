@@ -6,7 +6,17 @@ import (
 	"os"
 	"syscall"
 	"time"
+
+	"github.com/pocketbase/pocketbase/core"
 )
+
+// PingDeviceNetwork checks host reachability independently of a custom readiness
+// command (for example, an SSH login check). SSH stopping is not proof of suspend.
+func PingDeviceNetwork(device *core.Record) (bool, error) {
+	probe := core.NewRecord(device.Collection())
+	probe.Set("ip", device.GetString("ip"))
+	return PingDevice(probe)
+}
 
 func isNoRouteOrDownError(err error) bool {
 	opErr, ok := err.(*net.OpError)

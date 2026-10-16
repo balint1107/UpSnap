@@ -5,15 +5,19 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		%sveltekit.head%
 		<script>
-			const darkTheme = 'dim';
-			const lightTheme = 'silk';
+			const darkTheme = 'business';
+			const lightTheme = 'corporate';
 			const preferesDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-			const theme = localStorage.getItem('theme')
-				? localStorage.getItem('theme')
+			const savedTheme = localStorage.getItem('theme');
+			const theme = [darkTheme, lightTheme].includes(savedTheme)
+				? savedTheme
 				: preferesDark
 					? darkTheme
 					: lightTheme;
 			document.documentElement.setAttribute('data-theme', theme);
+			if (savedTheme && ![darkTheme, lightTheme].includes(savedTheme)) {
+				localStorage.setItem('theme', theme);
+			}
 
 			window
 				.matchMedia('(prefers-color-scheme: dark)')

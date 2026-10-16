@@ -91,6 +91,19 @@ func HandlerReboot(e *core.RequestEvent) error {
 	if err != nil {
 		return apis.NewNotFoundError("The device does not exist.", err)
 	}
+	if record.GetBool("reboot_only") {
+		if record.GetString("status") != "online" {
+			return apis.NewBadRequestError("Reboot requires an online host.", nil)
+		}
+		if err := networking.QueueHostReboot(e.Request.Context(), record); err != nil {
+			return apis.NewBadRequestError("Could not queue host reboot.", nil)
+		}
+		record.Set("status", "pending")
+		if err := e.App.Save(record); err != nil {
+			return err
+		}
+		return e.JSON(http.StatusAccepted, record)
+	}
 
 	record.Set("status", "pending")
 	if err := e.App.Save(record); err != nil {
@@ -169,7 +182,7 @@ func HandlerShutdown(e *core.RequestEvent) error {
 }
 
 func HandlerWakeGroup(e *core.RequestEvent) error {
-	records, err := e.App.FindRecordsByFilter("devices", "groups.id ?= {:grpId} && status = 'offline'", "", 0, 0,
+	records, err := e.App.FindRecordsByFilter("devices", "groups.id ?= {:grpId} && status = 'offline' && reboot_only = false", "", 0, 0,
 		dbx.Params{"grpId": e.Request.PathValue("id")},
 	)
 	if err != nil {
@@ -203,7 +216,7 @@ func HandlerWakeGroup(e *core.RequestEvent) error {
 }
 
 func HandlerShutdownGroup(e *core.RequestEvent) error {
-	records, err := e.App.FindRecordsByFilter("devices", "groups.id ?= {:grpId} && status = 'online'", "", 0, 0,
+	records, err := e.App.FindRecordsByFilter("devices", "groups.id ?= {:grpId} && status = 'online' && reboot_only = false", "", 0, 0,
 		dbx.Params{"grpId": e.Request.PathValue("id")},
 	)
 	if err != nil {

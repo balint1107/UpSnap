@@ -27,6 +27,7 @@
 	let searchInput: HTMLInputElement | undefined = $state();
 	let modalShutdownGroup: HTMLDialogElement | undefined = $state();
 	let pendingShutdownGroup: Group | null = $state(null);
+	let deviceRequest = 0;
 	let filteredDevices: Device[] = $derived([]);
 	let devicesWithoutGroups: Device[] = $derived([]);
 	let devicesWithGroup: {
@@ -35,7 +36,7 @@
 	}[] = $derived([]);
 
 	const isMac = browser && /Mac|iPhone|iPad/.test(navigator.userAgent);
-	const gridClass = 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4';
+	const gridClass = 'device-rows';
 
 	if (browser) {
 		const storedOrderBy = localStorage.getItem('orderBy');
@@ -87,13 +88,20 @@
 		}));
 	});
 
-	function getAllDevices() {
+	function getAllDevices(silent = false) {
+		const request = ++deviceRequest;
 		$pocketbase
 			.collection('devices')
 			.getFullList(-1, { sort: 'name', expand: 'ports,groups' })
-			.then((resp) => (devices = resp as Device[]))
-			.catch((err) => toast.error(err.message))
-			.finally(() => (loading = false));
+			.then((resp) => {
+				if (request === deviceRequest) devices = resp as Device[];
+			})
+			.catch((err) => {
+				if (!silent && request === deviceRequest) toast.error(err.message);
+			})
+			.finally(() => {
+				if (request === deviceRequest) loading = false;
+			});
 	}
 
 	function handleShortcut(event: KeyboardEvent) {
@@ -134,9 +142,22 @@
 		orderBy = (localStorage.getItem('orderBy') as 'name' | 'ip') || 'name';
 		orderByGroups = localStorage.getItem('orderByGroups') !== 'false';
 		getAllDevices();
-		['devices', 'ports', 'permissions'].forEach((collection) =>
-			$pocketbase.collection(collection).subscribe('*', getAllDevices)
+		const subscriptions = ['devices', 'ports', 'permissions'].map((collection) =>
+			$pocketbase.collection(collection).subscribe('*', () => getAllDevices())
 		);
+		const refreshIfVisible = () => {
+			if (document.visibilityState === 'visible') getAllDevices(true);
+		};
+		const timer = window.setInterval(refreshIfVisible, 30000);
+		document.addEventListener('visibilitychange', refreshIfVisible);
+		return () => {
+			++deviceRequest;
+			window.clearInterval(timer);
+			document.removeEventListener('visibilitychange', refreshIfVisible);
+			subscriptions.forEach((subscription) =>
+				subscription.then((unsubscribe) => unsubscribe()).catch(() => {})
+			);
+		};
 	});
 </script>
 
@@ -145,6 +166,18 @@
 {#if loading}
 	<PageLoading />
 {:else if devices.length > 0}
+	<div class="monitor-header">
+		<div>
+			<div class="monitor-eyebrow">Home infrastructure</div>
+			<h1>Server overview</h1>
+			<p>Power control and SSH availability. Access restricted to LAN and VPN.</p>
+		</div>
+		<div class="monitor-summary" aria-label="Server status summary">
+			<span><strong>{devices.length}</strong> hosts</span>
+			<span><strong>{devices.filter((d) => d.status === 'online').length}</strong> SSH ready</span>
+			<span><strong>{devices.filter((d) => d.status === 'offline').length}</strong> offline</span>
+		</div>
+	</div>
 	<div class="mb-4 flex flex-col justify-between gap-4 md:flex-row">
 		<label class="input max-md:w-full">
 			<svg class="h-[1em] opacity-50" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"

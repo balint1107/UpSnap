@@ -16,6 +16,9 @@ type SolResponse struct {
 }
 
 func SleepDevice(app core.App, device *core.Record) (SolResponse, error) {
+	if device.GetBool("reboot_only") {
+		return SolResponse{}, fmt.Errorf("sleep is disabled for this reboot-only host")
+	}
 	logging.Logger(app).Info("Sleep triggered", "device", device.GetString("name"))
 
 	var solResp SolResponse

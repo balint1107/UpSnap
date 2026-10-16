@@ -17,6 +17,7 @@ const config = {
 				'/',
 				'/login',
 				'/account',
+				'/services',
 				'/welcome',
 				'/device',
 				'/device/new',

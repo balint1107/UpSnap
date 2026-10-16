@@ -1,12 +1,17 @@
 <script lang="ts">
 	import { m } from '$lib/paraglide/messages';
+	import { readPowerResponse } from '$lib/helpers/power';
 	import { backendUrl, permission, pocketbase } from '$lib/stores/pocketbase';
 	import type { Device } from '$lib/types/device';
 	import { faPowerOff } from '@fortawesome/free-solid-svg-icons';
 	import Fa from 'svelte-fa';
 	import toast from 'svelte-french-toast';
 
-	let { device = $bindable() }: { device: Device } = $props();
+	let {
+		device = $bindable(),
+		compact = false,
+		showPower = true
+	}: { device: Device; compact?: boolean; showPower?: boolean } = $props();
 	let hoverText = $state('');
 	let disabled = $state(false);
 	let timeout = $state(120);
@@ -56,13 +61,9 @@
 				Authorization: $pocketbase.authStore.token
 			}
 		})
-			.then((resp) => resp.json())
+			.then(readPowerResponse)
 			.then(async (data) => {
-				if (data.status !== 200) {
-					device.status = 'offline';
-					return;
-				}
-				device = data as Device;
+				device = { ...device, ...data };
 				if (device.status === 'online' && device.link && device.link_open !== '') {
 					if (device.link_open === 'new_tab') {
 						window.open(device.link, '_blank');
@@ -71,8 +72,9 @@
 					}
 				}
 			})
-			.catch((err) => {
+			.catch(async (err) => {
 				toast.error(err.message);
+				device = await $pocketbase.collection('devices').getOne<Device>(device.id);
 			});
 	}
 
@@ -85,16 +87,13 @@
 				Authorization: $pocketbase.authStore.token
 			}
 		})
-			.then((resp) => resp.json())
+			.then(readPowerResponse)
 			.then(async (data) => {
-				if (data.status !== 200) {
-					device.status = 'online';
-					return;
-				}
-				device = data as Device;
+				device = { ...device, ...data };
 			})
-			.catch((err) => {
+			.catch(async (err) => {
 				toast.error(err.message);
+				device = await $pocketbase.collection('devices').getOne<Device>(device.id);
 			});
 	}
 
@@ -147,69 +146,77 @@
 	}
 </script>
 
-<div
-	class={`tooltip ${disabled ? 'cursor-not-allowed' : 'hover:bg-base-300 cursor-pointer'} bg-base-100 rounded-box flex items-start gap-4 p-2`}
-	data-tip={hoverText}
-	onclick={disabled ? null : handleClick}
-	onkeydown={disabled ? null : handleClick}
-	role="none"
->
-	{#if device.status === 'offline'}
-		<button class="btn btn-error btn-circle size-12"><Fa icon={faPowerOff} /></button>
-	{:else if device.status === 'online'}
-		<button
-			class="btn btn-success btn-circle size-12"
-			class:cursor-not-allowed={device.shutdown_cmd === ''}><Fa icon={faPowerOff} /></button
-		>
-	{:else if device.status === 'pending'}
-		<button class="btn btn-warning">
-			<span class="countdown font-mono tabular-nums">
-				<span style="--value:{minutes};--digits: 2"></span>:
-				<span style="--value:{seconds};--digits: 2"></span>
-			</span>
-		</button>
-	{:else}
-		<div class="btn btn-warning btn-circle size-12">
-			<span class="loading loading-ring loading-sm"></span>
+<div class="host-control" class:compact-control={compact}>
+	{#if !compact}
+		<div class="host-address">
+			<div class="address">{device.ip}</div>
+			<div class="mac">{device.mac}</div>
+			<div class="host-ports flex flex-wrap gap-x-4">
+				{#if device?.expand?.ports}
+					{#each $state
+						.snapshot(device)
+						.expand?.ports.sort((a, b) => a.number - b.number) as port (port.id)}
+						<span class="flex items-center gap-1 break-all">
+							{#if port.status}
+								<div class="inline-grid *:[grid-area:1/1]">
+									<div class="status status-success h-3 w-3 animate-ping"></div>
+									<div class="status status-success h-3 w-3"></div>
+								</div>
+							{:else}
+								<div class="inline-grid *:[grid-area:1/1]">
+									<div class="status status-error h-3 w-3 animate-ping"></div>
+									<div class="status status-error h-3 w-3"></div>
+								</div>
+							{/if}
+							{#if port.link}
+								<!-- eslint-disable svelte/no-navigation-without-resolve -->
+								<a
+									href={port.link}
+									target="_blank"
+									class="underline"
+									onclick={(e) => e.stopPropagation()}>{port.name} ({port.number})</a
+								>
+								<!-- eslint-enable svelte/no-navigation-without-resolve -->
+							{:else}
+								{port.name} ({port.number})
+							{/if}
+						</span>
+					{/each}
+				{/if}
+			</div>
 		</div>
 	{/if}
-	<div class="grow">
-		<div class="text-lg leading-4 font-bold">{device.ip}</div>
-		<div>{device.mac}</div>
-		<div class="flex flex-wrap gap-x-4">
-			{#if device?.expand?.ports}
-				{#each $state
-					.snapshot(device)
-					.expand?.ports.sort((a, b) => a.number - b.number) as port (port.id)}
-					<span class="flex items-center gap-1 break-all">
-						{#if port.status}
-							<div class="inline-grid *:[grid-area:1/1]">
-								<div class="status status-success h-3 w-3 animate-ping"></div>
-								<div class="status status-success h-3 w-3"></div>
-							</div>
-						{:else}
-							<div class="inline-grid *:[grid-area:1/1]">
-								<div class="status status-error h-3 w-3 animate-ping"></div>
-								<div class="status status-error h-3 w-3"></div>
-							</div>
-						{/if}
-						{#if port.link}
-							<!-- eslint-disable svelte/no-navigation-without-resolve -->
-							<a
-								href={port.link}
-								target="_blank"
-								class="underline"
-								onclick={(e) => e.stopPropagation()}>{port.name} ({port.number})</a
-							>
-							<!-- eslint-enable svelte/no-navigation-without-resolve -->
-						{:else}
-							{port.name} ({port.number})
-						{/if}
-					</span>
-				{/each}
+	{#if !showPower}
+
+	{:else if device.reboot_only}
+		<span class="text-base-content/60 text-xs">Reboot only</span>
+	{:else}
+		<button
+			class="btn host-power"
+			class:is-pending={device.status === 'pending'}
+			{disabled}
+			onclick={(event) => {
+				event.stopPropagation();
+				handleClick();
+			}}
+			onkeydown={(event) => event.stopPropagation()}
+			aria-label="{device.status === 'online'
+				? 'Suspend'
+				: device.status === 'offline'
+					? 'Wake'
+					: 'Waiting for'} {device.name}"
+			title={hoverText}
+		>
+			{#if device.status === 'pending'}
+				<span class="font-mono tabular-nums"
+					>{String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}</span
+				>
+			{:else}
+				<Fa icon={faPowerOff} />
+				{device.status === 'online' ? 'Suspend' : 'Wake'}
 			{/if}
-		</div>
-	</div>
+		</button>
+	{/if}
 </div>
 
 <dialog class="modal" bind:this={modalWake}>
@@ -230,9 +237,12 @@
 <dialog class="modal" bind:this={modalShutdown}>
 	<div class="modal-box">
 		<h3 class="text-lg font-bold">
-			{m.device_modal_confirm_shutdown_title({ device: device.name })}
+			Suspend {device.name}?
 		</h3>
-		<p class="py-4">{m.device_modal_confirm_shutdown_desc({ device: device.name })}</p>
+		<p class="py-4">
+			Suspend this server and wait until it becomes unreachable. You can wake it again using
+			Wake-on-LAN.
+		</p>
 		<div class="modal-action">
 			<form method="dialog">
 				<button class="btn">{m.buttons_cancel()}</button>

@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { nextCronDate } from '$lib/helpers/cron';
+	import { readPowerResponse } from '$lib/helpers/power';
 	import { m } from '$lib/paraglide/messages';
 	import { dateFnsLocale } from '$lib/stores/locale';
 	import { backendUrl, permission, pocketbase } from '$lib/stores/pocketbase';
@@ -17,11 +18,55 @@
 	import { formatDistance, parseISO } from 'date-fns';
 	import Fa from 'svelte-fa';
 	import toast from 'svelte-french-toast';
-	import { scale } from 'svelte/transition';
 	import DeviceCardNic from './DeviceCardNic.svelte';
+	import DeviceMetrics from './DeviceMetrics.svelte';
+	import ServiceAvailability from './ServiceAvailability.svelte';
+	import { serviceStatus } from '$lib/stores/services';
+	import type { HostMetrics } from '$lib/types/metrics';
 
 	let { device = $bindable() }: { device: Device } = $props();
+	let expanded = $state(false);
+	let metrics: HostMetrics | undefined = $state();
+	let metricsFailed = $state(false);
+	const hostServices = $derived($serviceStatus.services.filter((s) => s.host_ip === device.ip));
 	let modalReboot: HTMLDialogElement;
+	let modalRename: HTMLDialogElement;
+	let newName = $state('');
+	let savingName = $state(false);
+	let renameError = $state('');
+	const canRename = $derived(
+		$pocketbase.authStore.isSuperuser ||
+			($permission.read?.includes(device.id) &&
+				($permission.power?.includes(device.id) || $permission.update?.includes(device.id)))
+	);
+
+	function editName() {
+		newName = device.name;
+		renameError = '';
+		modalRename.showModal();
+	}
+
+	async function saveName(event: SubmitEvent) {
+		event.preventDefault();
+		if (savingName) return;
+		savingName = true;
+		renameError = '';
+		try {
+			const response = await fetch(`${backendUrl}api/upsnap/rename/${device.id}`, {
+				method: 'POST',
+				headers: { Authorization: $pocketbase.authStore.token, 'Content-Type': 'application/json' },
+				body: JSON.stringify({ name: newName.trim() })
+			});
+			const result = await response.json();
+			if (!response.ok) throw new Error(result.message || 'Could not save device name.');
+			device = { ...device, ...result };
+			modalRename.close();
+		} catch (error) {
+			renameError = error instanceof Error ? error.message : 'Could not save device name.';
+		} finally {
+			savingName = false;
+		}
+	}
 	let moreButtons = $derived([
 		{
 			text: m.device_card_btn_more_sleep(),
@@ -30,6 +75,7 @@
 			requires:
 				($pocketbase.authStore.isSuperuser || $permission.power?.includes(device.id)) &&
 				device.status === 'online' &&
+				!device.reboot_only &&
 				device.sol_enabled
 		},
 		{
@@ -39,7 +85,7 @@
 			requires:
 				($pocketbase.authStore.isSuperuser || $permission.power?.includes(device.id)) &&
 				device.status === 'online' &&
-				device.shutdown_cmd !== ''
+				(device.reboot_only || device.shutdown_cmd !== '')
 		},
 		{
 			text: m.device_card_btn_more_edit(),
@@ -74,9 +120,14 @@
 			headers: {
 				Authorization: $pocketbase.authStore.token
 			}
-		}).catch((err) => {
-			toast.error(err.message);
-		});
+		})
+			.then(readPowerResponse)
+			.then((result) => {
+				device = { ...device, ...result };
+			})
+			.catch((err) => {
+				toast.error(err.message);
+			});
 	}
 
 	function askRebootConfirmation() {
@@ -88,81 +139,183 @@
 	}
 </script>
 
-<div class="card bg-base-200 shadow-sm" transition:scale={{ delay: 0, duration: 200 }}>
-	<div class="card-body p-6">
-		{#if device.link !== ''}
-			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-			<a href={device.link} target="_blank">
-				<h1 class="link card-title">{device.name}</h1>
-			</a>
-		{:else}
-			<h1 class="card-title">{device.name}</h1>
-		{/if}
-		{#if device.description}
-			<p class="grow-0">{device.description}</p>
-		{/if}
-		<div class="card rounded-box w-full">
-			<DeviceCardNic bind:device />
+<details
+	class="server-card device-row bg-base-100"
+	bind:open={expanded}
+	data-device={device.name}
+	data-state={device.status}
+>
+	<summary class="device-row-summary">
+		<span class="row-host-name">{device.name}</span>
+		<span class="row-host-ip">{device.ip}</span>
+		<span class="host-state"
+			>{device.status === 'online'
+				? 'SSH ready'
+				: device.status === 'pending'
+					? 'Changing state'
+					: 'Offline'}</span
+		>
+		<span class="row-service-count"
+			>{hostServices.length} {hostServices.length === 1 ? 'service' : 'services'}</span
+		>
+		<DeviceMetrics {device} compact bind:metrics bind:failed={metricsFailed} />
+		<div class="row-power">
+			{#if device.reboot_only}
+				<button
+					class="btn host-power"
+					aria-label="Reboot {device.name}"
+					disabled={device.status !== 'online' ||
+						(!$pocketbase.authStore.isSuperuser && !$permission.power?.includes(device.id))}
+					onclick={(event) => {
+						event.stopPropagation();
+						askRebootConfirmation();
+					}}
+					onkeydown={(event) => event.stopPropagation()}>Reboot</button
+				>
+			{:else}
+				<DeviceCardNic bind:device compact />
+			{/if}
 		</div>
-		{#if device.wake_cron_enabled || device.shutdown_cron_enabled || device.password}
-			<div class="mt-1 flex flex-row flex-wrap gap-2">
-				{#if device.wake_cron_enabled}
-					<div class="tooltip" data-tip={m.device_card_tooltip_wake_cron()}>
-						<span class="badge badge-success gap-1 p-3"
-							><Fa icon={faCircleArrowUp} />
-							{nextCronDate(device.wake_cron)}
-						</span>
-					</div>
-				{/if}
-				{#if device.shutdown_cron_enabled}
-					<div class="tooltip" data-tip={m.device_card_tooltip_shutdown_cron()}>
-						<span class="badge badge-error gap-1 p-3"
-							><Fa icon={faCircleArrowDown} />
-							{nextCronDate(device.shutdown_cron)}
-						</span>
-					</div>
-				{/if}
-				{#if device.password}
-					<div class="tooltip" data-tip={m.device_card_tooltip_wake_password()}>
-						<span class="badge gap-1 p-3"><Fa icon={faLock} />{m.device_card_password()}</span>
+		<span class="row-chevron" aria-hidden="true">⌄</span>
+	</summary>
+	{#if expanded}
+		<div class="card-body p-6">
+			<div class="server-heading">
+				<div class="server-name">
+					{#if device.link !== ''}
+						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+						<a href={device.link} target="_blank">
+							<h1 class="link card-title">{device.name}</h1>
+						</a>
+					{:else}
+						<h1 class="card-title">{device.name}</h1>
+					{/if}
+					{#if canRename}
+						<button
+							class="btn btn-ghost rename-device"
+							aria-label="Edit name for {device.name}"
+							title="Edit device name"
+							onclick={editName}><Fa icon={faPen} /></button
+						>
+					{/if}
+				</div>
+				<span class="host-state"
+					>{device.status === 'online'
+						? 'SSH ready'
+						: device.status === 'pending'
+							? 'Changing state'
+							: 'Offline'}</span
+				>
+			</div>
+			{#if device.description}
+				<p class="server-description">{device.description}</p>
+			{/if}
+			<div class="card rounded-box w-full">
+				<DeviceCardNic bind:device showPower={false} />
+			</div>
+			<DeviceMetrics {device} collect={false} {metrics} failed={metricsFailed} />
+			<ServiceAvailability hostIp={device.ip} embedded />
+			{#if device.wake_cron_enabled || device.shutdown_cron_enabled || device.password}
+				<div class="mt-1 flex flex-row flex-wrap gap-2">
+					{#if device.wake_cron_enabled}
+						<div class="tooltip" data-tip={m.device_card_tooltip_wake_cron()}>
+							<span class="badge badge-success gap-1 p-3"
+								><Fa icon={faCircleArrowUp} />
+								{nextCronDate(device.wake_cron)}
+							</span>
+						</div>
+					{/if}
+					{#if device.shutdown_cron_enabled}
+						<div class="tooltip" data-tip={m.device_card_tooltip_shutdown_cron()}>
+							<span class="badge badge-error gap-1 p-3"
+								><Fa icon={faCircleArrowDown} />
+								{nextCronDate(device.shutdown_cron)}
+							</span>
+						</div>
+					{/if}
+					{#if device.password}
+						<div class="tooltip" data-tip={m.device_card_tooltip_wake_password()}>
+							<span class="badge gap-1 p-3"><Fa icon={faLock} />{m.device_card_password()}</span>
+						</div>
+					{/if}
+				</div>
+			{/if}
+			<div class="card-actions mt-auto items-center">
+				<span
+					class="tooltip"
+					data-tip="{m.device_card_tooltip_last_status_change()}: {device.updated}"
+				>
+					State changed
+					{formatDistance(parseISO(device.updated), now, {
+						includeSeconds: true,
+						addSuffix: true,
+						locale: $dateFnsLocale
+					})}
+				</span>
+				{#if moreButtons.filter((btn) => btn.requires).length > 0}
+					<div class="ms-auto flex flex-row flex-wrap gap-1">
+						{#each moreButtons as btn, i (i)}
+							{#if btn.requires}
+								<div class="tooltip" data-tip={btn.text}>
+									<button
+										class="btn btn-sm btn-circle"
+										aria-label="{btn.text} {device.name}"
+										onclick={btn.onClick}
+									>
+										<Fa icon={btn.icon} />
+									</button>
+								</div>
+							{/if}
+						{/each}
 					</div>
 				{/if}
 			</div>
-		{/if}
-		<div class="card-actions mt-auto items-center">
-			<span
-				class="tooltip"
-				data-tip="{m.device_card_tooltip_last_status_change()}: {device.updated}"
-			>
-				{formatDistance(parseISO(device.updated), now, {
-					includeSeconds: true,
-					addSuffix: true,
-					locale: $dateFnsLocale
-				})}
-			</span>
-			{#if moreButtons.filter((btn) => btn.requires).length > 0}
-				<div class="ms-auto flex flex-row flex-wrap gap-1">
-					{#each moreButtons as btn, i (i)}
-						{#if btn.requires}
-							<div class="tooltip" data-tip={btn.text}>
-								<button class="btn btn-sm btn-circle" onclick={btn.onClick}>
-									<Fa icon={btn.icon} />
-								</button>
-							</div>
-						{/if}
-					{/each}
-				</div>
-			{/if}
 		</div>
-	</div>
-</div>
+	{/if}
+</details>
+
+<dialog
+	class="modal"
+	bind:this={modalRename}
+	aria-label="Edit device name"
+	oncancel={(event) => {
+		if (savingName) event.preventDefault();
+	}}
+>
+	<form class="modal-box" onsubmit={saveName}>
+		<h2 class="text-lg font-bold">Edit device name</h2>
+		<label class="form-control mt-4 block">
+			<span class="mb-2 block">Device name</span>
+			<input
+				class="input input-bordered w-full"
+				bind:value={newName}
+				required
+				maxlength="100"
+				disabled={savingName}
+			/>
+		</label>
+		{#if renameError}<p class="text-error mt-2" role="alert">{renameError}</p>{/if}
+		<div class="modal-action">
+			<button type="button" class="btn" disabled={savingName} onclick={() => modalRename.close()}
+				>Cancel</button
+			>
+			<button type="submit" class="btn btn-primary" disabled={savingName || !newName.trim()}
+				>{savingName ? 'Saving…' : 'Save'}</button
+			>
+		</div>
+	</form>
+</dialog>
 
 <dialog class="modal" bind:this={modalReboot}>
 	<div class="modal-box">
 		<h3 class="text-lg font-bold">
-			{m.device_modal_confirm_shutdown_title({ device: device.name })}
+			Reboot {device.name}?
 		</h3>
-		<p class="py-4">{m.device_modal_confirm_shutdown_desc({ device: device.name })}</p>
+		<p class="py-4">
+			{device.reboot_only
+				? 'Restart this host. The dashboard and other services on it will be briefly unavailable.'
+				: 'Restart this host by suspending it and sending Wake-on-LAN.'}
+		</p>
 		<div class="modal-action">
 			<form method="dialog">
 				<button class="btn">{m.buttons_cancel()}</button>

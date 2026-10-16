@@ -18,6 +18,13 @@
     </div>
 </div>
 
+## Home-server dashboard fork
+
+This branch adds expandable device rows, SSH-ready power tracking, live resources,
+reboot-only hosts and service availability grouped by host. See
+[dashboard behavior](docs/dashboard-ui.md), [power controls](docs/power-controls.md)
+and the [Pi deployment guide](https://github.com/balint1107/home-automation/blob/main/docs/monitor.md).
+
 ## ✨ Features
 
 - 🚀 One-Click Device Wake-Up Dashboard

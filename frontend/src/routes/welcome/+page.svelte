@@ -23,7 +23,7 @@
 	<div class="my-4 flex w-screen max-w-lg flex-col gap-16">
 		<div class="card bg-base-200 shadow-sm">
 			{#if !$settingsPub?.setup_completed}
-				<figure class="mx-auto w-44 pt-6"><img src={asset('/gopher.svg')} alt="Gopher" /></figure>
+				<figure class="mx-auto w-44 pt-6"><img src={asset('/server-mark.svg')} alt="Gopher" /></figure>
 				<div class="card-body">
 					<h2 class="card-title">{m.welcome_title()}</h2>
 					<p>{m.welcome_desc()}</p>

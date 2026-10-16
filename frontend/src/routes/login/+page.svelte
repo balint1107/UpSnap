@@ -64,11 +64,11 @@
 				<h1 class="text-center text-xl font-bold">{$settingsPub?.website_title}</h1>
 			{/if}
 			<div class="flex flex-row gap-4">
-				<figure class="w-16">
+				<figure class="login-mark">
 					<img
 						src={$settingsPub?.id && $settingsPub?.favicon
 							? `${backendUrl}api/files/settings_public/${$settingsPub?.id}/${$settingsPub?.favicon}`
-							: asset('/gopher.svg')}
+							: asset('/server-mark.svg')}
 						alt={$settingsPub?.website_title ? $settingsPub?.website_title : 'Gopher'}
 					/>
 				</figure>

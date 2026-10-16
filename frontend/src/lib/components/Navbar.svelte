@@ -21,43 +21,7 @@
 	import Fa from 'svelte-fa';
 	import { themeChange } from 'theme-change';
 
-	let availableThemes = [
-		'light',
-		'dark',
-		'cupcake',
-		'bumblebee',
-		'emerald',
-		'corporate',
-		'synthwave',
-		'retro',
-		'cyberpunk',
-		'valentine',
-		'halloween',
-		'garden',
-		'forest',
-		'aqua',
-		'lofi',
-		'pastel',
-		'fantasy',
-		'wireframe',
-		'black',
-		'luxury',
-		'dracula',
-		'cmyk',
-		'autumn',
-		'business',
-		'acid',
-		'lemonade',
-		'night',
-		'coffee',
-		'winter',
-		'dim',
-		'nord',
-		'sunset',
-		'caramellatte',
-		'abyss',
-		'silk'
-	];
+	let availableThemes = ['corporate', 'business'];
 	let activeTheme: string | null = '';
 	let avatar = $pocketbase.authStore.record?.avatar;
 
@@ -113,7 +77,14 @@
 				{/if}
 				<li>
 					<a href={resolve('/')} class="px-4 py-2" class:active={page.url.pathname === resolve('/')}
-						><Fa icon={faHome} />{m.home_page_title()}</a
+						><Fa icon={faHome} />Devices</a
+					>
+				</li>
+				<li>
+					<a
+						href={resolve('/services')}
+						class="px-4 py-2"
+						class:active={page.url.pathname.startsWith(resolve('/services'))}>Services</a
 					>
 				</li>
 				{#if $pocketbase.authStore.isSuperuser}
@@ -182,10 +153,10 @@
 			<img
 				src={$settingsPub?.id && $settingsPub?.favicon
 					? `${backendUrl}api/files/settings_public/${$settingsPub?.id}/${$settingsPub?.favicon}`
-					: asset('/gopher.svg')}
+					: asset('/server-mark.svg')}
 				alt={$settingsPub?.website_title ? $settingsPub?.website_title : 'UpSnap'}
-				width="45"
-				height="45"
+				width="32"
+				height="32"
 			/>
 		</a>
 	</div>
@@ -196,7 +167,14 @@
 		<ul class="menu menu-horizontal h-full gap-1 px-1">
 			<li class="h-full">
 				<a href={resolve('/')} class="p-2" class:menu-active={page.url.pathname === resolve('/')}
-					><Fa icon={faHome} />{m.home_page_title()}</a
+					><Fa icon={faHome} />Devices</a
+				>
+			</li>
+			<li class="h-full">
+				<a
+					href={resolve('/services')}
+					class="p-2"
+					class:menu-active={page.url.pathname.startsWith(resolve('/services'))}>Services</a
 				>
 			</li>
 			{#if $pocketbase.authStore.isSuperuser}
@@ -270,8 +248,8 @@
 			{/if}
 			<div class="dropdown dropdown-end">
 				<label tabindex="-1" class="avatar btn btn-circle btn-ghost" for="avatar">
-					<div class="w-10 rounded-full" id="avatar">
-						<img src={asset(`/avatars/avatar${avatar}.svg`)} alt="Avatar {avatar}" />
+					<div class="account-mark" id="avatar" aria-label="Account menu">
+						<Fa icon={faUserGear} />
 					</div>
 				</label>
 				<ul

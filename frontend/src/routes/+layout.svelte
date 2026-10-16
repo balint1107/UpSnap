@@ -122,7 +122,7 @@
 		rel="shortcut icon"
 		href={$settingsPub?.id && $settingsPub?.favicon
 			? `${backendUrl}api/files/settings_public/${$settingsPub?.id}/${$settingsPub?.favicon}`
-			: asset('/gopher.svg')}
+			: asset('/server-mark.svg')}
 	/>
 	{#if $settingsPub === undefined}
 		<title>UpSnap</title>
