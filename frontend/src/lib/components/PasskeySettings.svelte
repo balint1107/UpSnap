@@ -48,10 +48,6 @@
 		<div class="card-body gap-3">
 			<h2 class="card-title">Passkeys</h2>
 			{#if $pocketbase.authStore.record?.collectionName === 'users'}
-				<p>
-					Sign in with Touch ID, Face ID, or your device PIN. Save your passkey in Apple Passwords
-					when prompted.
-				</p>
 				<div class="flex flex-wrap items-center gap-2">
 					<input class="input" aria-label="Passkey label" bind:value={label} maxlength="80" />
 					<button class="btn btn-outline" disabled={busy || keys.length >= 10} onclick={add}
@@ -74,13 +70,8 @@
 							aria-label={`Remove ${key.label}`}>Remove</button
 						>
 					</div>
-				{:else}<p class="text-sm opacity-70">
-						No passkeys registered. Keep your password for recovery.
-					</p>{/each}
-			{:else}<p>
-					Passkeys are available for regular user accounts. Superuser access keeps password login
-					for recovery.
-				</p>{/if}
+				{:else}<p class="text-sm opacity-70">No passkeys registered.</p>{/each}
+			{:else}<p>Passkeys require a regular user account.</p>{/if}
 		</div>
 	</section>
 {/if}

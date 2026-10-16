@@ -143,3 +143,9 @@ record/resource/service requests from Refresh, and no power API calls during the
 checks. Layouts fit at 390, 768, 1001, 1200 and 1440px. The overview subtitle now
 reflects public passkey access and LAN/VPN-only password sign-in. Production build
 passed; the existing generated Paraglide type-check error remains.
+
+Routine pages omit explanatory subtitles, service-collector implementation notes,
+and passkey tutorials. The initial stock device descriptions are cleared in the
+home deployment; custom descriptions remain supported. Action confirmations,
+errors, live status/freshness indicators, and the public login's short LAN/VPN
+password-access explanation remain available. Operational details stay in docs.

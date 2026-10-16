@@ -178,9 +178,7 @@
 					</div>
 				</form>
 			{:else if policyLoaded}
-				<p class="text-sm opacity-70">
-					Use your passkey to sign in. Password and recovery sign-in are available on LAN or VPN.
-				</p>
+				<p class="text-sm opacity-70">Password sign-in requires LAN or VPN.</p>
 			{:else}
 				<p class="text-sm opacity-70">Loading sign-in options…</p>
 			{/if}

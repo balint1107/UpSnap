@@ -32,7 +32,6 @@
 		<div>
 			{#if !embedded}<div class="monitor-eyebrow">Application availability</div>{/if}
 			<h2>Services</h2>
-			<p>Checked from server-rpi every 30 seconds, including while this dashboard is closed.</p>
 		</div>
 		<button class="btn btn-sm" disabled={$serviceStatus.fetching} onclick={refreshServices}
 			>Refresh services</button
@@ -80,20 +79,12 @@
 					: 'No service checks configured for this host.'}
 		</p>
 	{/each}
-
-	{#if services.length && !embedded}<p class="services-note">
-			Results are marked stale if the Pi collector stops reporting for 90 seconds. HTTP availability
-			does not verify every application function.
-		</p>{/if}
 </section>
 
 <style>
 	.services-section.embedded {
 		margin-top: 0;
 		padding-top: 1.2rem;
-	}
-	.embedded .services-heading p {
-		display: none;
 	}
 	.embedded h2 {
 		font-size: 1rem;
@@ -128,8 +119,6 @@
 		font-weight: 650;
 		margin-block: 0.3rem;
 	}
-	.services-heading p,
-	.services-note,
 	.service-foot {
 		color: var(--monitor-muted);
 		font-size: 0.8rem;
@@ -180,9 +169,6 @@
 		font-size: 0.8rem;
 		margin-block: 0.35rem;
 		min-height: 0;
-	}
-	.services-note {
-		margin-top: 1rem;
 	}
 	.service-error {
 		color: var(--color-warning);
