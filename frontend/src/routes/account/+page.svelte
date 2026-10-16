@@ -1,4 +1,5 @@
 <script lang="ts">
+	import PasskeySettings from '$lib/components/PasskeySettings.svelte';
 	import { goto } from '$app/navigation';
 	import { asset, resolve } from '$app/paths';
 	import { m } from '$lib/paraglide/messages';
@@ -143,6 +144,7 @@
 </script>
 
 <h1 class="mb-8 text-3xl font-bold">{m.account_page_title()}</h1>
+<PasskeySettings />
 <div class="card bg-base-200 w-full shadow-sm">
 	<div class="card-body">
 		<div class="flex flex-row items-center gap-4">

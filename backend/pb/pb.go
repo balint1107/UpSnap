@@ -75,6 +75,13 @@ func StartPocketBase(distDirFS fs.FS) error {
 
 	// event hooks
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
+		policy, err := registerLoginPolicy(se)
+		if err != nil {
+			return err
+		}
+		if err := registerPasskeys(se, policy); err != nil {
+			return err
+		}
 		se.Router.BindFunc(SkipSuccessfulHealthCheckLog)
 		se.Router.GET("/{path...}", apis.Static(distDirFS, true))
 		se.Router.GET("/api/upsnap/wake/{id}", HandlerWake).Bind(RequireUpSnapPermission()).Bind(RequireWakeSuspendAllowed())
