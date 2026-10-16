@@ -13,7 +13,7 @@
 		faCircleArrowUp,
 		faLock,
 		faPen,
-		faRotateLeft
+		faArrowsRotate
 	} from '@fortawesome/free-solid-svg-icons';
 	import { formatDistance, parseISO } from 'date-fns';
 	import Fa from 'svelte-fa';
@@ -21,13 +21,45 @@
 	import DeviceCardNic from './DeviceCardNic.svelte';
 	import DeviceMetrics from './DeviceMetrics.svelte';
 	import ServiceAvailability from './ServiceAvailability.svelte';
-	import { serviceStatus } from '$lib/stores/services';
+	import { refreshServices, serviceStatus } from '$lib/stores/services';
 	import type { HostMetrics } from '$lib/types/metrics';
 
 	let { device = $bindable() }: { device: Device } = $props();
 	let expanded = $state(false);
 	let metrics: HostMetrics | undefined = $state();
 	let metricsFailed = $state(false);
+	let refreshing = $state(false);
+	const canReboot = $derived(
+		($pocketbase.authStore.isSuperuser || $permission.power?.includes(device.id)) &&
+			(device.reboot_only || device.shutdown_cmd !== '')
+	);
+	async function refreshDevice() {
+		if (refreshing) return;
+		refreshing = true;
+		try {
+			device = await $pocketbase
+				.collection('devices')
+				.getOne<Device>(device.id, { expand: 'ports,groups' });
+			if (device.status === 'online') {
+				const response = await fetch(`${backendUrl}api/upsnap/stats/${device.id}`, {
+					headers: { Authorization: $pocketbase.authStore.token },
+					cache: 'no-store'
+				});
+				if (!response.ok) throw new Error('Resource readings unavailable');
+				const reading = (await response.json()) as HostMetrics;
+				metrics = reading.available ? reading : undefined;
+				metricsFailed = !reading.available;
+			} else {
+				metrics = undefined;
+				metricsFailed = false;
+			}
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'Could not refresh device information');
+		} finally {
+			refreshServices();
+			refreshing = false;
+		}
+	}
 	const hostServices = $derived($serviceStatus.services.filter((s) => s.host_ip === device.ip));
 	let modalReboot: HTMLDialogElement;
 	let modalRename: HTMLDialogElement;
@@ -77,15 +109,6 @@
 				device.status === 'online' &&
 				!device.reboot_only &&
 				device.sol_enabled
-		},
-		{
-			text: m.device_card_btn_more_reboot(),
-			icon: faRotateLeft,
-			onClick: () => askRebootConfirmation(),
-			requires:
-				($pocketbase.authStore.isSuperuser || $permission.power?.includes(device.id)) &&
-				device.status === 'online' &&
-				(device.reboot_only || device.shutdown_cmd !== '')
 		},
 		{
 			text: m.device_card_btn_more_edit(),
@@ -160,19 +183,7 @@
 		>
 		<DeviceMetrics {device} compact bind:metrics bind:failed={metricsFailed} />
 		<div class="row-power">
-			{#if device.reboot_only}
-				<button
-					class="btn host-power"
-					aria-label="Reboot {device.name}"
-					disabled={device.status !== 'online' ||
-						(!$pocketbase.authStore.isSuperuser && !$permission.power?.includes(device.id))}
-					onclick={(event) => {
-						event.stopPropagation();
-						askRebootConfirmation();
-					}}
-					onkeydown={(event) => event.stopPropagation()}>Reboot</button
-				>
-			{:else}
+			{#if !device.reboot_only}
 				<DeviceCardNic bind:device compact />
 			{/if}
 		</div>
@@ -211,7 +222,7 @@
 				<p class="server-description">{device.description}</p>
 			{/if}
 			<div class="card rounded-box w-full">
-				<DeviceCardNic bind:device showPower={false} />
+				<DeviceCardNic bind:device onReboot={canReboot ? askRebootConfirmation : undefined} />
 			</div>
 			<DeviceMetrics {device} collect={false} {metrics} failed={metricsFailed} />
 			<ServiceAvailability hostIp={device.ip} embedded />
@@ -252,8 +263,15 @@
 						locale: $dateFnsLocale
 					})}
 				</span>
+				<button
+					class="btn btn-sm ms-auto"
+					disabled={refreshing}
+					aria-label="Refresh info for {device.name}"
+					onclick={refreshDevice}
+					><Fa icon={faArrowsRotate} />{refreshing ? 'Refreshing…' : 'Refresh'}</button
+				>
 				{#if moreButtons.filter((btn) => btn.requires).length > 0}
-					<div class="ms-auto flex flex-row flex-wrap gap-1">
+					<div class="flex flex-row flex-wrap gap-1">
 						{#each moreButtons as btn, i (i)}
 							{#if btn.requires}
 								<div class="tooltip" data-tip={btn.text}>

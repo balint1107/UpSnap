@@ -10,8 +10,9 @@
 	let {
 		device = $bindable(),
 		compact = false,
-		showPower = true
-	}: { device: Device; compact?: boolean; showPower?: boolean } = $props();
+		showPower = true,
+		onReboot
+	}: { device: Device; compact?: boolean; showPower?: boolean; onReboot?: () => void } = $props();
 	let hoverText = $state('');
 	let disabled = $state(false);
 	let timeout = $state(120);
@@ -186,36 +187,48 @@
 			</div>
 		</div>
 	{/if}
-	{#if !showPower}
-
-	{:else if device.reboot_only}
-		<span class="text-base-content/60 text-xs">Reboot only</span>
-	{:else}
-		<button
-			class="btn host-power"
-			class:is-pending={device.status === 'pending'}
-			{disabled}
-			onclick={(event) => {
-				event.stopPropagation();
-				handleClick();
-			}}
-			onkeydown={(event) => event.stopPropagation()}
-			aria-label="{device.status === 'online'
-				? 'Suspend'
-				: device.status === 'offline'
-					? 'Wake'
-					: 'Waiting for'} {device.name}"
-			title={hoverText}
-		>
-			{#if device.status === 'pending'}
-				<span class="font-mono tabular-nums"
-					>{String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}</span
+	{#if showPower}
+		<div class="host-power-actions">
+			{#if !device.reboot_only}
+				<button
+					class="btn host-power"
+					class:is-pending={device.status === 'pending'}
+					{disabled}
+					onclick={(event) => {
+						event.stopPropagation();
+						handleClick();
+					}}
+					onkeydown={(event) => event.stopPropagation()}
+					aria-label="{device.status === 'online'
+						? 'Suspend'
+						: device.status === 'offline'
+							? 'Wake'
+							: 'Waiting for'} {device.name}"
+					title={hoverText}
 				>
-			{:else}
-				<Fa icon={faPowerOff} />
-				{device.status === 'online' ? 'Suspend' : 'Wake'}
+					{#if device.status === 'pending'}
+						<span class="font-mono tabular-nums"
+							>{String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}</span
+						>
+					{:else}
+						<Fa icon={faPowerOff} />
+						{device.status === 'online' ? 'Suspend' : 'Wake'}
+					{/if}
+				</button>
 			{/if}
-		</button>
+			{#if onReboot}
+				<button
+					class="btn host-power"
+					aria-label="Reboot {device.name}"
+					disabled={device.status !== 'online'}
+					onclick={(event) => {
+						event.stopPropagation();
+						onReboot?.();
+					}}
+					onkeydown={(event) => event.stopPropagation()}>Reboot</button
+				>
+			{/if}
+		</div>
 	{/if}
 </div>
 

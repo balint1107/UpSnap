@@ -578,3 +578,10 @@ body {
 		grid-row: 1 / 5;
 	}
 }
+
+/* Expanded details group power actions; strips show Wake/Suspend only. */
+.host-power-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+}

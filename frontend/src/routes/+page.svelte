@@ -170,7 +170,10 @@
 		<div>
 			<div class="monitor-eyebrow">Home infrastructure</div>
 			<h1>Server overview</h1>
-			<p>Power control and SSH availability. Access restricted to LAN and VPN.</p>
+			<p>
+				Power control and SSH availability. Passkeys work anywhere; password sign-in requires LAN or
+				VPN.
+			</p>
 		</div>
 		<div class="monitor-summary" aria-label="Server status summary">
 			<span><strong>{devices.length}</strong> hosts</span>

@@ -130,3 +130,16 @@ Compact-row checks passed on desktop and 390px mobile without overflow. Opening
 details issued no duplicate metrics request. Reboot/suspend confirmation and
 Cancel left rows collapsed, and no power requests were sent during verification.
 The three power-response regression tests and production build passed.
+
+Refresh is now a labelled information action: it reloads the device record,
+current resource reading, and shared service snapshot without sending a power
+command. Reboot is a separate labelled button beside Wake/Suspend, retaining its
+existing confirmation and permissions. All hosts expose Reboot only in expanded
+details. Row strips contain only Wake/Suspend; reboot-only hosts have no power
+action on their strip. The strip keeps its compact single-button width.
+
+Browser checks confirmed Reboot confirmation/Cancel in details, no row reboot actions,
+record/resource/service requests from Refresh, and no power API calls during the
+checks. Layouts fit at 390, 768, 1001, 1200 and 1440px. The overview subtitle now
+reflects public passkey access and LAN/VPN-only password sign-in. Production build
+passed; the existing generated Paraglide type-check error remains.
