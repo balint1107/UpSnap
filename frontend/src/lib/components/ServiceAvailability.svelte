@@ -166,6 +166,7 @@
 	}
 	.service-detail {
 		flex: 0 0 auto;
+		white-space: pre-line;
 		font-size: 0.8rem;
 		margin-block: 0.35rem;
 		min-height: 0;

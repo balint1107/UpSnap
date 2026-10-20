@@ -108,6 +108,10 @@ results every 30 seconds regardless of how many rows are expanded. Web services
 use the service name as the only link, opening a new tab with noopener;
 checks without a web UI remain unlinked. Only HTTP(S) service URLs are rendered.
 
+The network-filtering card includes current enforcement, the configured daily
+window/timezone and next on/off transition, or an explicit paused/off schedule.
+Service details preserve line breaks while retaining the same compact card size.
+
 The separate Open service/URL line has been removed. Browser verification found
 one name link per web service and confirmed the MLflow name opens its real page.
 
