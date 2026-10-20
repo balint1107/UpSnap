@@ -2,6 +2,7 @@ package networking
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -43,5 +44,16 @@ func TestHostStatsCacheAndValidation(t *testing.T) {
 	writeSSH("150")
 	if _, err := ReadHostStats(context.Background(), device); err == nil {
 		t.Fatal("invalid CPU readings must be rejected")
+	}
+}
+
+func TestOptionalGPUStats(t *testing.T) {
+	var stats HostStats
+	err := json.Unmarshal([]byte(`{"gpus":[{"id":"pci-1","name":"GPU","source":"nvidia-smi","utilization_percent":0,"memory_used":1024,"memory_total":4096,"temperature_c":50,"power_watts":null},{"id":"pci-2","name":"GPU 2","source":"sysfs","temperature_c":33}]}`), &stats)
+	if err != nil || len(stats.GPUs) != 2 {
+		t.Fatalf("GPU response lost: %+v, %v", stats, err)
+	}
+	if stats.GPUs[0].UtilizationPercent == nil || *stats.GPUs[0].UtilizationPercent != 0 || stats.GPUs[0].PowerWatts != nil || stats.GPUs[1].MemoryUsed != nil {
+		t.Fatalf("zero and unsupported counters must remain distinct: %+v", stats.GPUs)
 	}
 }

@@ -337,48 +337,45 @@ func asyncCall(e *core.RequestEvent, fn func() *router.ApiError) *router.ApiErro
 }
 
 func HandlerWebsiteManifest(e *core.RequestEvent) error {
-	scheme := "http"
-	if e.Request.TLS != nil || e.Request.Header.Get("X-Forwarded-Proto") == "https" {
-		scheme = "https"
-	}
-	baseUrl := fmt.Sprintf("%s://%s", scheme, e.Request.Host)
+	// Relative manifest URLs preserve the deployment prefix, including /monitor/.
 
 	manifest := map[string]any{
-		"name":             "UpSnap",
-		"short_name":       "UpSnap",
-		"description":      "A simple wake on lan web app written with SvelteKit, Go and PocketBase.",
-		"theme_color":      "#55BCD9",
-		"background_color": "#55BCD9",
+		"name":             "Server Monitor",
+		"short_name":       "Server Monitor",
+		"description":      "Home server status and power controls.",
+		"theme_color":      "#213b55",
+		"background_color": "#213b55",
 		"display":          "standalone",
-		"scope":            baseUrl,
-		"start_url":        baseUrl,
+		"id":               "../../",
+		"scope":            "../../",
+		"start_url":        "../../",
 		"icons": []map[string]string{
 			{
-				"src":     "/icon_192.png",
+				"src":     "../../icon_192.png?v=server-monitor-1",
 				"sizes":   "192x192",
 				"type":    "image/png",
 				"purpose": "any",
 			},
 			{
-				"src":     "/icon_512.png",
+				"src":     "../../icon_512.png?v=server-monitor-1",
 				"sizes":   "512x512",
 				"type":    "image/png",
 				"purpose": "any",
 			},
 			{
-				"src":     "/maskable_192.png",
+				"src":     "../../maskable_192.png?v=server-monitor-1",
 				"sizes":   "192x192",
 				"type":    "image/png",
 				"purpose": "maskable",
 			},
 			{
-				"src":     "/maskable_512.png",
+				"src":     "../../maskable_512.png?v=server-monitor-1",
 				"sizes":   "512x512",
 				"type":    "image/png",
 				"purpose": "maskable",
 			},
 			{
-				"src":   "/gopher.svg",
+				"src":   "../../server-mark.svg?v=server-monitor-1",
 				"sizes": "any",
 				"type":  "image/svg+xml",
 			},
@@ -401,7 +398,7 @@ func HandlerWebsiteManifest(e *core.RequestEvent) error {
 
 		manifest["icons"] = []map[string]string{
 			{
-				"src":     fmt.Sprintf("%s/api/files/settings_public/%s/%s", baseUrl, publicSettings.Id, favicon),
+				"src":     fmt.Sprintf("../../api/files/settings_public/%s/%s", publicSettings.Id, favicon),
 				"sizes":   "any",
 				"purpose": "any",
 			},

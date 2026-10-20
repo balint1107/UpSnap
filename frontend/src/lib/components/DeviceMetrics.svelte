@@ -148,6 +148,32 @@
 				{/each}
 			</details>
 		{/if}
+		{#each metrics?.gpus ?? [] as gpu (gpu.id)}
+			<div class="gpu-readings">
+				<div class="gpu-heading">{gpu.name}</div>
+				<div class="metrics-grid gpu-grid">
+					<div class="metric">
+						<span class="metric-label">GPU load</span>
+						<strong>{gpu.utilization_percent == null ? '—' : `${gpu.utilization_percent.toFixed(0)}%`}</strong>
+					</div>
+					<div class="metric">
+						<span class="metric-label">VRAM</span>
+						<strong>{gpu.memory_used != null && gpu.memory_total ? `${(100 * gpu.memory_used / gpu.memory_total).toFixed(0)}%` : '—'}</strong>
+						{#if gpu.memory_used != null && gpu.memory_total}
+							<small>{size(gpu.memory_used)} / {size(gpu.memory_total)}</small>
+						{/if}
+					</div>
+					<div class="metric">
+						<span class="metric-label">Temperature</span>
+						<strong>{gpu.temperature_c == null ? '—' : `${gpu.temperature_c.toFixed(0)} °C`}</strong>
+					</div>
+					<div class="metric">
+						<span class="metric-label">Power</span>
+						<strong>{gpu.power_watts == null ? '—' : `${gpu.power_watts.toFixed(1)} W`}</strong>
+					</div>
+				</div>
+			</div>
+		{/each}
 		{#if metrics}<div class="metrics-time">
 				Read at {new Date(metrics.collected_at).toLocaleTimeString('en-GB', {
 					timeZone: 'Europe/Budapest',

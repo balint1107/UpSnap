@@ -49,7 +49,7 @@
 	function resetFavicon() {
 		if (settingsPubClone) settingsPubClone.favicon = '';
 		if (faviconInputElement) faviconInputElement.value = '';
-		if (faviconPreview) faviconPreview.src = '/gopher.svg';
+		if (faviconPreview) faviconPreview.src = asset('/server-mark.svg');
 	}
 
 	async function save() {
@@ -224,7 +224,7 @@ second (0–59, optional)
 						class="h-36"
 						src={$settingsPub.favicon !== ''
 							? `${backendUrl}api/files/settings_public/${$settingsPub.id}/${$settingsPub.favicon}`
-							: asset('/gopher.svg')}
+							: asset('/server-mark.svg')}
 						alt="Favicon preview"
 						bind:this={faviconPreview}
 					/>

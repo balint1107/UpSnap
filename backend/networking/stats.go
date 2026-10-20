@@ -24,7 +24,20 @@ type HostStats struct {
 	MemoryUsed  uint64      `json:"memory_used"`
 	MemoryTotal uint64      `json:"memory_total"`
 	Disks       []DiskStats `json:"disks"`
+	GPUs        []GPUStats  `json:"gpus,omitempty"`
 	CollectedAt time.Time   `json:"collected_at"`
+}
+
+// Optional counters remain null when the driver cannot provide them.
+type GPUStats struct {
+	ID                 string   `json:"id"`
+	Name               string   `json:"name"`
+	Source             string   `json:"source"`
+	UtilizationPercent *float64 `json:"utilization_percent"`
+	MemoryUsed         *float64 `json:"memory_used"`
+	MemoryTotal        *float64 `json:"memory_total"`
+	TemperatureC       *float64 `json:"temperature_c"`
+	PowerWatts         *float64 `json:"power_watts"`
 }
 
 type statsEntry struct {
@@ -70,6 +83,20 @@ func ReadHostStats(ctx context.Context, device *core.Record) (HostStats, error) 
 	for _, disk := range value.Disks {
 		if disk.Total == 0 || disk.Used > disk.Total {
 			return HostStats{}, fmt.Errorf("disk values outside valid ranges")
+		}
+	}
+	for i := range value.GPUs {
+		gpu := &value.GPUs[i]
+		for _, counter := range []**float64{&gpu.UtilizationPercent, &gpu.MemoryUsed, &gpu.MemoryTotal, &gpu.TemperatureC, &gpu.PowerWatts} {
+			if *counter != nil && **counter < 0 {
+				*counter = nil
+			}
+		}
+		if gpu.UtilizationPercent != nil && *gpu.UtilizationPercent > 100 {
+			gpu.UtilizationPercent = nil
+		}
+		if gpu.MemoryTotal != nil && (*gpu.MemoryTotal == 0 || (gpu.MemoryUsed != nil && *gpu.MemoryUsed > *gpu.MemoryTotal)) {
+			gpu.MemoryUsed, gpu.MemoryTotal = nil, nil
 		}
 	}
 	value.Available = true

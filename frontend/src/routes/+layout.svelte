@@ -16,6 +16,14 @@
 
 	let { children } = $props();
 	let authIsValid = $state(false);
+	let manifestHref = $state(
+		asset('/server-mark.svg').replace(/[^/]*$/, 'api/upsnap/manifest.webmanifest')
+	);
+	$effect(() => {
+		// An absolute client URL keeps the manifest stable across SPA redirects.
+		const iconURL = new URL(asset('/server-mark.svg'), page.url);
+		manifestHref = new URL('api/upsnap/manifest.webmanifest', iconURL).href;
+	});
 
 	const toastOptions: ToastOptions = {
 		duration: 5000
@@ -113,9 +121,10 @@
 </script>
 
 <svelte:head>
+	<!-- Keep the API manifest relative to the same app directory as static icons. -->
 	<link
 		rel="manifest"
-		href={backendUrl + 'api/upsnap/manifest.webmanifest'}
+		href={manifestHref}
 		crossorigin="use-credentials"
 	/>
 	<link
@@ -123,6 +132,13 @@
 		href={$settingsPub?.id && $settingsPub?.favicon
 			? `${backendUrl}api/files/settings_public/${$settingsPub?.id}/${$settingsPub?.favicon}`
 			: asset('/server-mark.svg')}
+	/>
+	<link
+		rel="apple-touch-icon"
+		sizes="180x180"
+		href={$settingsPub?.id && $settingsPub?.favicon
+			? `${backendUrl}api/files/settings_public/${$settingsPub.id}/${$settingsPub.favicon}`
+			: asset('/apple-touch-icon.png') + '?v=server-monitor-1'}
 	/>
 	{#if $settingsPub === undefined}
 		<title>UpSnap</title>

@@ -8,6 +8,15 @@ confirm completion. Decorative avatars, mascot defaults and card scale animation
 are removed. Mobile layouts stack cards and summary information without scrolling
 horizontally. Power handling and access permissions are retained.
 
+Saved web apps use the navy server logo, with 192/512px PNG, maskable and
+180px Apple touch icons. Manifest icons, launch URL, scope and app ID resolve
+relative to the manifest, preserving `/monitor/` instead of using another app
+at the domain root. Uploaded custom icons remain supported. macOS/iOS may retain
+an installed icon: remove the old web app/shortcut and add it again to refresh.
+Verified production build, backend tests, PNG dimensions and live manifest/icon
+URLs. The HTML manifest link is relative during prerendering and resolves to a
+stable app URL in the browser, including after SPA login redirects.
+
 Each card includes live CPU, memory and local disk usage, collected only while
 SSH is ready. Browser requests run every 15 seconds; the backend shares a 15-second
 memory cache between sessions. The authenticated `/api/upsnap/stats/{id}` endpoint
@@ -15,6 +24,19 @@ uses the device's read permission and returns unavailable without running SSH fo
 offline/pending devices. Collection uses the fixed `stats` SSH command configured
 by `UPSNAP_STATS_SSH_CONFIG`. No metrics history or additional database writes are
 introduced. A previous reading remains visibly marked as stale after disconnect.
+
+Expanded resources also display available GPU diagnostics per device: model,
+utilization, VRAM usage, temperature and power. The restricted host collector uses
+a two-second `nvidia-smi` query, with read-only DRM/sysfs fallback for counters
+provided by other drivers (including Nouveau temperature). Unsupported fields
+remain null/dashes; hosts without GPU counters omit the section. GPU failures do
+not disable CPU/RAM/disk readings. GPU data shares the existing refresh/cache and
+stale indication; no persistent metrics history is added.
+
+GPU verification: collector tests cover multiple NVIDIA devices, unsupported
+values, CLI timeout, no GPU and AMD/sysfs units. Backend tests and production
+build passed; live forced-SSH/API readings and 1440px/390px layouts were checked.
+The pre-existing generated Paraglide `async_hooks` type-check error remains.
 
 Read the deployment's `docs/monitor.md` for how to rebuild the frontend and embed
 it into the ARM64 binary. Verify desktop/mobile rendering and server status against
