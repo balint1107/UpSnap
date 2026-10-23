@@ -86,3 +86,46 @@ authenticator: public passkey enrollment/sign-in and token refresh passed, passw
 attempts with correct credentials returned 403 (including collection IDs and forged
 headers), and LAN password login returned 200. All temporary credentials/accounts
 were removed and existing registered passkeys preserved.
+
+## Browser SSH terminals
+
+Any authenticated monitor user may open `/terminal/?device=<id>`; device power
+permissions do not grant or restrict this separate SSH login. Each connection
+requires an SSH username and password. The Go bridge uses password authentication
+only, never monitor keys, an SSH agent, or a saved password. Passwords and monitor
+tokens travel in the first same-origin WSS frame, never URLs or application logs.
+Terminal content is not recorded by the monitor; host shell policies still apply.
+
+Set `UPSNAP_TERMINAL_HOSTS` to comma-separated literal device IPs and
+`UPSNAP_TERMINAL_KNOWN_HOSTS` to an existing OpenSSH known_hosts file. Only those
+online device records on port 22 are reachable. Ed25519 host keys must already be pinned (the bridge explicitly negotiates Ed25519);
+unknown/changed keys fail before password transmission. The configured
+`UPSNAP_WEBAUTHN_ORIGIN` also supplies the exact allowed WebSocket origin. Empty
+origin/host configuration disables terminals. nginx must forward WebSocket Upgrade
+and Connection headers under the existing `/monitor/` prefix.
+
+The first frame has a 10-second deadline and 8 KiB limit. Sessions have a
+15-minute input-idle timeout, eight-hour maximum, two sessions per account,
+16 active SSH sessions globally and 32 socket handshakes globally. Each account
+may attempt six SSH logins per minute. Tokens are revalidated every 30 seconds;
+logout/navigation closes the current browser terminal immediately. Closing a
+socket releases the SSH channel. Resize and input frames are size bounded.
+SSH password sign-in works wherever an authenticated monitor session is allowed;
+the LAN/VPN restriction on the monitor's own password login remains unchanged.
+
+Verification: backend tests cover password-only SSH with multiple offered host-key
+types, rejection before credential transmission for unknown keys, PTY shell
+input/output and resizing, origin checks, allowlisted destinations and capacity
+limits. The frozen dependency install and production build pass. The only
+frontend type-check failure remains the pre-existing generated Paraglide
+`async_hooks` error. Live checks cover monitor authentication, WebSocket upgrade,
+invalid-token rejection, anonymous page redirects, mobile layout and row IP alignment.
+A temporary regular user without device grants could access terminal metadata for
+all three hosts while its ordinary device list remained empty; it was removed. All three real hosts
+negotiate the pinned Ed25519 key and reach password authentication. Successful
+login with the user's private machine passwords requires user verification.
+
+The terminal page retains separate SSH username/password fields and
+Connect/Disconnect controls above the remote terminal. Authentication completes
+before opening the remote shell. The password field is cleared when connecting;
+SSH credentials are not entered through an emulated terminal login prompt.

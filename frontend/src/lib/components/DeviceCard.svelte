@@ -13,7 +13,9 @@
 		faCircleArrowUp,
 		faLock,
 		faPen,
-		faArrowsRotate
+		faArrowsRotate,
+		faTerminal,
+		faChevronDown
 	} from '@fortawesome/free-solid-svg-icons';
 	import { formatDistance, parseISO } from 'date-fns';
 	import Fa from 'svelte-fa';
@@ -169,7 +171,7 @@
 	data-state={device.status}
 >
 	<summary class="device-row-summary">
-		<span class="row-host-name">{device.name}</span>
+		<span class="row-host-name" title={device.name}>{device.name}</span>
 		<span class="row-host-ip">{device.ip}</span>
 		<span class="host-state"
 			>{device.status === 'online'
@@ -187,7 +189,14 @@
 				<DeviceCardNic bind:device compact />
 			{/if}
 		</div>
-		<span class="row-chevron" aria-hidden="true">⌄</span>
+		<div class="row-terminal">
+			{#if device.status === 'online' && $pocketbase.authStore.isValid}
+				<a class="btn host-power host-icon-button" aria-label="Open terminal for {device.name}" title="Terminal"
+					href={resolve('/terminal') + '/?device=' + encodeURIComponent(device.id)}
+					onclick={(event) => event.stopPropagation()} onkeydown={(event) => event.stopPropagation()}><Fa icon={faTerminal} /></a>
+			{/if}
+		</div>
+		<span class="row-chevron" aria-hidden="true"><Fa icon={faChevronDown} /></span>
 	</summary>
 	{#if expanded}
 		<div class="card-body p-6">

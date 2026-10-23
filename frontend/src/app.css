@@ -598,7 +598,58 @@ body {
 	}
 }
 
-/* Expanded details group power actions; strips show Wake/Suspend only. */
+/* Reserve identical control slots, including on reboot-only and offline hosts. */
+.host-power.host-icon-button,
+.row-power .host-power.host-icon-button {
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+    min-height: 40px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+}
+.device-row-summary {
+    grid-template-columns: minmax(130px, 1.3fr) 125px 100px minmax(180px, 1fr) 70px 40px 40px 20px;
+    grid-template-rows: 40px;
+    height: 80px;
+    padding-block: 20px;
+}
+.row-host-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-power, .row-terminal, .row-chevron {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    align-self: stretch;
+}
+.device-row-summary > .row-terminal { grid-column: 7; grid-row: 1; }
+.device-row-summary > .row-chevron { grid-column: 8; grid-row: 1; }
+.row-chevron { width: 20px; font-size: 10px; }
+@media (max-width: 1000px) {
+    .device-row-summary {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 40px 40px 20px;
+        grid-template-rows: 24px 20px 20px;
+        height: 112px;
+        padding-block: 16px;
+        row-gap: 8px;
+    }
+    .device-row-summary > .row-terminal { grid-column: 4; grid-row: 1 / 4; }
+    .device-row-summary > .row-chevron { grid-column: 5; grid-row: 1 / 4; }
+    .row-power, .row-terminal { align-items: center; }
+}
+@media (max-width: 600px) {
+    .device-row-summary {
+        grid-template-columns: minmax(0, 1fr) 100px 40px 20px;
+        grid-template-rows: 24px 20px 20px 40px;
+        height: 160px;
+    }
+    .device-row-summary > .row-power { justify-content: flex-end; }
+    .device-row-summary > .row-terminal { grid-column: 3; grid-row: 4; }
+    .device-row-summary > .row-chevron { grid-column: 4; grid-row: 4; }
+}
+/* Expanded details retain the separate Reboot action. */
 .host-power-actions {
 	display: flex;
 	flex-wrap: wrap;

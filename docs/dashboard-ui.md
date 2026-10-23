@@ -175,3 +175,23 @@ and passkey tutorials. The initial stock device descriptions are cleared in the
 home deployment; custom descriptions remain supported. Action confirmations,
 errors, live status/freshness indicators, and the public login's short LAN/VPN
 password-access explanation remain available. Operational details stay in docs.
+
+
+Connected device rows include a terminal icon in a reserved column, preserving
+IP alignment for offline rows. It opens a separate xterm.js page with a fresh
+SSH username/password prompt, responsive PTY sizing, and mobile control keys.
+Any signed-in user can use it; the SSH host still authenticates every session.
+
+
+Device rows use matching 40px bordered power and terminal icon buttons. The moon
+means Suspend, the power symbol means Wake, and a spinner marks a pending action;
+accessible names and hover labels retain the action and device name. The pending
+hover label includes its countdown. Reboot remains labelled in expanded details.
+Reserved control columns, a centered chevron icon and fixed row heights at each
+responsive breakpoint keep reboot-only, online, offline and pending rows aligned.
+
+Power/terminal glyphs are 12px and chevrons 10px, with unchanged 40px button
+targets. Mobile actions share a bottom control row. Browser checks cover uniform
+row heights and IP/chevron alignment at 390, 768, 1000, 1001, 1200 and 1440px;
+offline/pending fixtures issue no power requests. Production build passes; the
+previously documented generated Paraglide type-check error remains.

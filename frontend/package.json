@@ -47,6 +47,8 @@
 	"dependencies": {
 		"@fortawesome/free-solid-svg-icons": "^7.3.1",
 		"@tailwindcss/vite": "^4.3.3",
+		"@xterm/addon-fit": "0.11.0",
+		"@xterm/xterm": "6.0.0",
 		"cron-parser": "^5.10.1",
 		"date-fns": "^4.4.0",
 		"pocketbase": "^0.28.1",

@@ -23,6 +23,7 @@ import (
 
 var Version = "(untracked)"
 
+// StartPocketBase registers dashboard APIs and serves the embedded application.
 func StartPocketBase(distDirFS fs.FS) error {
 	if err := logging.ConfigureConsole(os.Getenv("UPSNAP_LOG_LEVEL")); err != nil {
 		return err
@@ -87,6 +88,8 @@ func StartPocketBase(distDirFS fs.FS) error {
 		se.Router.GET("/api/upsnap/wake/{id}", HandlerWake).Bind(RequireUpSnapPermission()).Bind(RequireWakeSuspendAllowed())
 		se.Router.GET("/api/upsnap/stats/{id}", HandlerHostStats).Bind(RequireDeviceReadPermission())
 		se.Router.GET("/api/upsnap/services", HandlerServices).Bind(apis.RequireAuth())
+		se.Router.GET("/api/upsnap/terminal/devices/{id}", HandlerTerminalDevice).Bind(apis.RequireAuth())
+		se.Router.GET("/api/upsnap/terminal/connect", HandlerTerminal)
 		se.Router.POST("/api/upsnap/rename/{id}", HandlerRenameDevice).Bind(RequireDeviceReadPermission())
 		se.Router.GET("/api/upsnap/wakegroup/{id}", HandlerWakeGroup).Bind(RequireUpSnapPermission())
 		se.Router.GET("/api/upsnap/sleep/{id}", HandlerSleep).Bind(RequireUpSnapPermission()).Bind(RequireWakeSuspendAllowed())

@@ -3,7 +3,7 @@
 	import { readPowerResponse } from '$lib/helpers/power';
 	import { backendUrl, permission, pocketbase } from '$lib/stores/pocketbase';
 	import type { Device } from '$lib/types/device';
-	import { faPowerOff } from '@fortawesome/free-solid-svg-icons';
+	import { faPowerOff, faMoon, faSpinner } from '@fortawesome/free-solid-svg-icons';
 	import Fa from 'svelte-fa';
 	import toast from 'svelte-french-toast';
 
@@ -191,7 +191,8 @@
 		<div class="host-power-actions">
 			{#if !device.reboot_only}
 				<button
-					class="btn host-power"
+					class="btn host-power host-icon-button"
+					data-state={device.status}
 					class:is-pending={device.status === 'pending'}
 					{disabled}
 					onclick={(event) => {
@@ -204,16 +205,15 @@
 						: device.status === 'offline'
 							? 'Wake'
 							: 'Waiting for'} {device.name}"
-					title={hoverText}
+					title={device.status === 'pending'
+                        ? `${hoverText} ${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+                        : device.status === 'online' ? `Suspend ${device.name}` : `Wake ${device.name}`}
 				>
 					{#if device.status === 'pending'}
-						<span class="font-mono tabular-nums"
-							>{String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}</span
-						>
-					{:else}
-						<Fa icon={faPowerOff} />
-						{device.status === 'online' ? 'Suspend' : 'Wake'}
-					{/if}
+                        <span class="animate-spin" aria-hidden="true"><Fa icon={faSpinner} /></span>
+                    {:else}
+                        <Fa icon={device.status === 'online' ? faMoon : faPowerOff} />
+                    {/if}
 				</button>
 			{/if}
 			{#if onReboot}
