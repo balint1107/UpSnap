@@ -183,8 +183,9 @@ SSH username/password prompt, responsive PTY sizing, and mobile control keys.
 Any signed-in user can use it; the SSH host still authenticates every session.
 
 
-Device rows use matching 40px bordered power and terminal icon buttons. The moon
-means Suspend, the power symbol means Wake, and a spinner marks a pending action;
+Device rows use matching 40px bordered power and terminal icon buttons. The power
+symbol indicates online, the moon indicates offline/suspended, and a spinner
+marks a pending action;
 accessible names and hover labels retain the action and device name. The pending
 hover label includes its countdown. Reboot remains labelled in expanded details.
 Reserved control columns, a centered chevron icon and fixed row heights at each

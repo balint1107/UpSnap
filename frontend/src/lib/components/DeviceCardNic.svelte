@@ -212,7 +212,7 @@
 					{#if device.status === 'pending'}
                         <span class="animate-spin" aria-hidden="true"><Fa icon={faSpinner} /></span>
                     {:else}
-                        <Fa icon={device.status === 'online' ? faMoon : faPowerOff} />
+                        <Fa icon={device.status === 'online' ? faPowerOff : faMoon} />
                     {/if}
 				</button>
 			{/if}
