@@ -88,6 +88,7 @@ func StartPocketBase(distDirFS fs.FS) error {
 		se.Router.GET("/api/upsnap/wake/{id}", HandlerWake).Bind(RequireUpSnapPermission()).Bind(RequireWakeSuspendAllowed())
 		se.Router.GET("/api/upsnap/stats/{id}", HandlerHostStats).Bind(RequireDeviceReadPermission())
 		se.Router.GET("/api/upsnap/services", HandlerServices).Bind(apis.RequireAuth())
+		se.Router.GET("/api/upsnap/power", HandlerPower).Bind(apis.RequireAuth())
 		se.Router.GET("/api/upsnap/terminal/devices/{id}", HandlerTerminalDevice).Bind(apis.RequireAuth())
 		se.Router.GET("/api/upsnap/terminal/connect", HandlerTerminal)
 		se.Router.POST("/api/upsnap/rename/{id}", HandlerRenameDevice).Bind(RequireDeviceReadPermission())

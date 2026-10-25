@@ -2,6 +2,7 @@
 	import { browser } from '$app/environment';
 	import { resolve } from '$app/paths';
 	import DeviceCard from '$lib/components/DeviceCard.svelte';
+	import PowerDevices from '$lib/components/PowerDevices.svelte';
 	import PageLoading from '$lib/components/PageLoading.svelte';
 	import { m } from '$lib/paraglide/messages';
 	import { localeStore } from '$lib/stores/locale';
@@ -293,6 +294,8 @@
 		</div>
 	</div>
 {/if}
+
+{#if !loading}<PowerDevices search={searchQuery} />{/if}
 
 <dialog class="modal" bind:this={modalShutdownGroup}>
 	<div class="modal-box">

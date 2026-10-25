@@ -196,3 +196,26 @@ targets. Mobile actions share a bottom control row. Browser checks cover uniform
 row heights and IP/chevron alignment at 390, 768, 1000, 1001, 1200 and 1440px;
 offline/pending fixtures issue no power requests. Production build passes; the
 previously documented generated Paraglide type-check error remains.
+
+## Read-only smart-plug devices
+
+The P115 now appears as its own disclosure row on Devices, with IP, outlet state,
+watts and today's kWh. Expansion shows voltage/current, monthly energy and two
+responsive SVG charts: sampled power over 24h and observed daily energy over 30d.
+The plug has no SSH or relay controls and is no longer listed under Services.
+Search includes the plug name/IP; host summaries continue counting SSH hosts.
+
+`/api/upsnap/power` reads the Pi's `power.json` next to the service snapshot,
+requires authentication and the collecting host's read permission, bounds input
+to 1 MiB/8 devices/1441 samples/30 days and marks old/future readings stale.
+The UI polls at 30s while visible and aborts on navigation. Failures retain history
+with stale status and hide current values. History is sampled from activation,
+not fabricated or backfilled; daily totals are partial observations and today is
+incomplete. Hovering plotted points/bars reveals recorded values; collection gaps
+over two minutes are left disconnected. No chart dependency was added.
+See deployment `docs/monitor.md` for retention, storage and the private collector.
+
+Verified production ARM64 deployment with real P115 readings, persistent samples,
+Devices/Services placement and 1440px/390px layouts. Backend/networking tests,
+15 collector tests and production frontend build pass. Full Svelte checking still
+reports the existing generated Paraglide `async_hooks` type error only.
