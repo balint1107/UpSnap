@@ -1,6 +1,7 @@
 package networking
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,7 +16,12 @@ type SolResponse struct {
 	Message string `json:"message"`
 }
 
+// SleepDevice invokes device SOL sleep using app for logging; both arguments are borrowed.
+// Returns the SOL response and any unsupported-OS, network or response error; no fallback power action occurs.
 func SleepDevice(app core.App, device *core.Record) (SolResponse, error) {
+	if err := CheckSuspendSupport(context.Background(), device.GetString("ip")); err != nil {
+		return SolResponse{}, err
+	}
 	if device.GetBool("reboot_only") {
 		return SolResponse{}, fmt.Errorf("sleep is disabled for this reboot-only host")
 	}

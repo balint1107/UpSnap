@@ -1,28 +1,30 @@
 <script lang="ts">
 	import { serviceStatus, refreshServices } from '$lib/stores/services';
-	let { hostIp, embedded = false }: { hostIp?: string; embedded?: boolean } = $props();
-	const services = $derived($serviceStatus.services.filter((s) => !hostIp || s.host_ip === hostIp));
+	let { deviceId, embedded = false }: { deviceId?: string; embedded?: boolean } = $props();
+	const services = $derived($serviceStatus.services.filter((s) => !deviceId || s.device_id === deviceId));
 	const groups = $derived(
-		Array.from(new Set(services.map((s) => s.host_ip))).map((ip) => ({
-			ip,
-			name: services.find((s) => s.host_ip === ip)?.host_name ?? ip,
-			services: services.filter((s) => s.host_ip === ip)
+		Array.from(new Set(services.map((s) => s.device_id))).map((id) => ({
+			id,
+			ip: services.find((s) => s.device_id === id)?.host_ip ?? '',
+			name: services.find((s) => s.device_id === id)?.host_name ?? id,
+			services: services.filter((s) => s.device_id === id)
 		}))
 	);
 	const labels: Record<string, string> = {
-		up: 'Available',
-		down: 'Unavailable',
-		offline: 'Host offline',
+		online: 'Available',
+		offline: 'Unavailable',
 		disabled: 'Disabled',
 		degraded: 'Degraded',
 		unknown: 'Unknown',
 		stale: 'Stale'
 	};
+	/** Return an HTTP(S) service link, or undefined for missing/unsupported schemes. */
 	function webUrl(url?: string) {
 		return url && /^https?:\/\//i.test(url) ? url : undefined;
 	}
 </script>
 
+{#if !embedded || services.length > 0}
 <section
 	class="services-section"
 	class:embedded
@@ -40,14 +42,14 @@
 	{#if $serviceStatus.failed}<p class="service-error" role="status">
 			Cannot refresh service checks. Previous results are stale.
 		</p>{/if}
-	{#each groups as group (group.ip)}
+	{#each groups as group (group.id)}
 		{#if !embedded}<h3 class="service-group-heading">{group.name} <span>{group.ip}</span></h3>{/if}
 		<div class="service-grid">
 			{#each group.services as service (service.id)}
 				<article
 					class="service-panel"
 					data-service={service.id}
-					data-service-state={$serviceStatus.failed ? 'stale' : service.status}
+					data-service-state={$serviceStatus.failed ? 'stale' : service.state}
 				>
 					<div class="service-heading">
 						<h3>
@@ -58,7 +60,7 @@
 								>{:else}{service.name}{/if}
 						</h3>
 						<span class="service-state"
-							>{$serviceStatus.failed ? 'Stale' : labels[service.status] || 'Unknown'}</span
+							>{$serviceStatus.failed ? 'Stale' : labels[service.state] || 'Unknown'}</span
 						>
 					</div>
 					<p class="service-detail">{service.detail}</p>
@@ -80,6 +82,7 @@
 		</p>
 	{/each}
 </section>
+{/if}
 
 <style>
 	.services-section.embedded {
@@ -154,10 +157,10 @@
 		color: var(--monitor-muted);
 		white-space: nowrap;
 	}
-	[data-service-state='up'] .service-state {
+	[data-service-state='online'] .service-state {
 		color: var(--color-success);
 	}
-	[data-service-state='down'] .service-state {
+	[data-service-state='offline'] .service-state {
 		color: var(--color-error);
 	}
 	[data-service-state='degraded'] .service-state,

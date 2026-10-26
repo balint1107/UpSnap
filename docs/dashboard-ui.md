@@ -197,6 +197,36 @@ row heights and IP/chevron alignment at 390, 768, 1000, 1001, 1200 and 1440px;
 offline/pending fixtures issue no power requests. Production build passes; the
 previously documented generated Paraglide type-check error remains.
 
+
+The terminal page fills the available visual viewport instead of adding a fixed
+65vh terminal below a tall form. Small screens use two-column login fields,
+16px login/terminal inputs to avoid automatic browser zoom, and two rows of touch
+control keys.
+Connected sessions collapse the disabled login fields; Login expands them again,
+while Disconnect remains visible. The visual viewport accounts for software
+keyboard changes and triggers PTY resizing. Portrait and landscape share this
+compact mode; login and password-only SSH authentication remain unchanged.
+
+Verified production build and browser layouts at 320x568, 390x844, 844x390 and
+1440x900. A browser-only connected-session fixture covered Login expansion,
+Disconnect restoration, PTY resize frames and a reduced 390x400 viewport. These
+checks do not simulate the actual iOS keyboard. No real machine password or power
+action was used for the layout checks. The generated Paraglide type-check error
+remains unchanged.
+
+Dual-boot hosts show an authenticated OS badge within the existing device row.
+Expanded details use one collapsible OS card matching device rows. Its header
+contains the selected OS, Boot entry, Validate/Restart buttons and chevron.
+The expanded list contains only OS choices and their Boot entries; selecting one
+closes the list. Buttons act independently of expansion; progress appears outside
+the choices. Checkmarks identify the authenticated running OS, not the selected
+restart target, and disappear while offline, unknown or switching. The selected
+target remains highlighted. Background status refreshes
+preserve an explicit selection. Authorized, enabled Restart choices require confirmation
+and track the expected OS's SSH readiness; ordinary Reboot is omitted for managed
+hosts. Switching disables conflicting power actions. See `docs/dual-boot.md`.
+
+
 ## Read-only smart-plug devices
 
 The P115 now appears as its own disclosure row on Devices, with IP, outlet state,
@@ -219,6 +249,7 @@ Verified production ARM64 deployment with real P115 readings, persistent samples
 Devices/Services placement and 1440px/390px layouts. Backend/networking tests,
 15 collector tests and production frontend build pass. Full Svelte checking still
 reports the existing generated Paraglide `async_hooks` type error only.
+
 
 Chart refinement: plots now use the full measured card width with fixed-size
 11px labels and a compact 190px plotting area, avoiding SVG letterboxing and
@@ -276,3 +307,13 @@ visually checked on desktop and mobile.
 
 A live 31-second check observed the router snapshot timestamp advance by 30s;
 all four routers remained online with tested radio/indicator states restored.
+
+## Shared device metadata
+
+The dashboard consumes version-one common envelopes (`docs/device-schema.md`) for
+computer capability metadata and router/appliance state/support. Section labels share
+one type contract. Services group by stable `device_id`, including embedded cards in
+router/appliance details, rather than IP comparisons. Driver-specific rows, charts,
+password terminals and action authorization remain in place. Legacy driver payloads
+are preserved for compatibility; inventory polling is visible-page-only every 30s and
+reads cached metadata, without adding SSH probes.

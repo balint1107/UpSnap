@@ -11,8 +11,9 @@
 		device = $bindable(),
 		compact = false,
 		showPower = true,
+		powerUnavailable = false,
 		onReboot
-	}: { device: Device; compact?: boolean; showPower?: boolean; onReboot?: () => void } = $props();
+	}: { device: Device; compact?: boolean; showPower?: boolean; powerUnavailable?: boolean; onReboot?: () => void } = $props();
 	let hoverText = $state('');
 	let disabled = $state(false);
 	let timeout = $state(120);
@@ -194,7 +195,7 @@
 					class="btn host-power host-icon-button"
 					data-state={device.status}
 					class:is-pending={device.status === 'pending'}
-					{disabled}
+					disabled={disabled || powerUnavailable}
 					onclick={(event) => {
 						event.stopPropagation();
 						handleClick();
@@ -205,7 +206,7 @@
 						: device.status === 'offline'
 							? 'Wake'
 							: 'Waiting for'} {device.name}"
-					title={device.status === 'pending'
+					title={powerUnavailable ? 'Suspend is not yet supported for this operating system.' : device.status === 'pending'
                         ? `${hoverText} ${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
                         : device.status === 'online' ? `Suspend ${device.name}` : `Wake ${device.name}`}
 				>

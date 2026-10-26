@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { deviceCategories, type DeviceEnvelope } from '$lib/types/inventory';
+	import ServiceAvailability from './ServiceAvailability.svelte';
 	import { onMount } from 'svelte';
 	import { get } from 'svelte/store';
 	import { backendUrl, pocketbase } from '$lib/stores/pocketbase';
@@ -6,6 +8,7 @@
 	import Fa from 'svelte-fa';
 	import PowerChart from './PowerChart.svelte';
 	type Plug = {
+		device: DeviceEnvelope;
 		id: string;
 		name: string;
 		ip: string;
@@ -77,13 +80,14 @@
 {#if failed && devices.length === 0}<p class="power-error" role="status">
 		Power device readings unavailable.
 	</p>{/if}
-{#if visible.length}<h2 class="appliance-heading">Home appliances</h2>{/if}
+{#if visible.length}<h2 class="appliance-heading">{deviceCategories.home_appliances}</h2>{/if}
 {#each visible as device (device.id)}
-	{@const fresh = !failed && device.status === 'up'}
+	{@const fresh = !failed && device.device.state === 'online'}
 	<details
 		class="server-card device-row bg-base-100 power-device"
 		data-power-device={device.id}
-		data-state={fresh ? 'online' : 'offline'}
+		data-inventory-id={device.device.id} data-category={device.device.category}
+		data-state={failed ? 'stale' : device.device.state}
 	>
 		<summary class="device-row-summary">
 			<span class="row-host-name"><Fa icon={faPlug} /> {device.name}</span>
@@ -138,12 +142,13 @@
 				/>
 			</div>
 			<div class="power-foot">
-				Checked {new Date(device.checked_at).toLocaleString('en-GB', {
+				Checked {new Date(device.device.checked_at ?? 0).toLocaleString('en-GB', {
 					timeZone: 'Europe/Budapest'
 				})}{#if device.reading.firmware}
 					· Firmware {device.reading.firmware}{/if}
 			</div>
 		</div>
+	<ServiceAvailability deviceId={device.device.id} embedded />
 	</details>
 {/each}
 

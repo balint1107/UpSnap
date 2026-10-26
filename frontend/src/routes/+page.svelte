@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { deviceCategories } from '$lib/types/inventory';
 	import { browser } from '$app/environment';
 	import { resolve } from '$app/paths';
 	import DeviceCard from '$lib/components/DeviceCard.svelte';
@@ -233,7 +234,7 @@
 			</button>
 		</div>
 	</div>
-	<h2 class="mb-3 text-lg font-semibold">Computers</h2>
+	<h2 class="mb-3 text-lg font-semibold">{deviceCategories.computers}</h2>
 	{#if orderByGroups}
 		<div class="space-y-6">
 			{#if devicesWithoutGroups.length > 0}

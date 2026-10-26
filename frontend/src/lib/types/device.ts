@@ -3,6 +3,7 @@ import type { RecordModel } from 'pocketbase';
 export type Device = RecordModel & {
 	name: string;
 	reboot_only?: boolean;
+	boot_managed?: boolean;
 	ip: string;
 	mac: string;
 	netmask: string;

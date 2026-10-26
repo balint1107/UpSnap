@@ -12,6 +12,7 @@ import (
 
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
+	"github.com/seriousm4x/upsnap/networking"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
 	"golang.org/x/net/websocket"
@@ -128,7 +129,7 @@ func terminalDevice(app core.App, id string) (*core.Record, string, error) {
 	return d, target, nil
 }
 
-// HandlerTerminalDevice returns metadata and the configured SSH username for signed-in users.
+// HandlerTerminalDevice returns metadata and the OS-specific default SSH username for authenticated e.
 // Returns JSON or an API error; no SSH credentials or power commands are sent.
 func HandlerTerminalDevice(e *core.RequestEvent) error {
 	d, target, err := terminalDevice(e.App, e.Request.PathValue("id"))
@@ -139,6 +140,13 @@ func HandlerTerminalDevice(e *core.RequestEvent) error {
 	username := "balint"
 	if router := routerByTarget(target); router != nil {
 		username = router.Username
+	}
+	if host, cfgErr := networking.BootConfiguration(d.GetString("ip")); cfgErr != nil {
+		return apis.NewApiError(http.StatusServiceUnavailable, "Boot profiles unavailable.", nil)
+	} else if host != nil {
+		if name, probeErr := networking.DetectBootOS(e.Request.Context(), d.GetString("ip")); probeErr == nil {
+			username = host.Profiles[name].Username
+		}
 	}
 	return e.JSON(http.StatusOK, map[string]string{"id": d.Id, "name": d.GetString("name"), "ip": d.GetString("ip"), "username": username})
 }

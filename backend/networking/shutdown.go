@@ -14,7 +14,12 @@ import (
 	"github.com/seriousm4x/upsnap/logging"
 )
 
+// ShutdownDevice executes the configured suspend/shutdown for borrowed device using app logging.
+// trigger is an audit label; returns an error on unsupported OS, failed command or completion timeout.
 func ShutdownDevice(app core.App, device *core.Record, trigger string) error {
+	if err := CheckSuspendSupport(context.Background(), device.GetString("ip")); err != nil {
+		return err
+	}
 	if device.GetBool("reboot_only") {
 		return fmt.Errorf("suspend is disabled for this reboot-only host")
 	}

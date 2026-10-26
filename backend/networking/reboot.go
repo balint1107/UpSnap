@@ -10,9 +10,13 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 )
 
-// QueueHostReboot uses a fixed forced SSH action, never suspend followed by WoL.
-// The remote helper delays reboot so the response and pending state can be saved.
+// QueueHostReboot uses borrowed device configuration and ctx cancellation to queue a fixed Pi reboot.
+// Returns an error for managed dual-boot hosts, unsupported records, or failed SSH; never falls back to suspend.
 func QueueHostReboot(ctx context.Context, device *core.Record) error {
+	host, configErr := BootConfiguration(device.GetString("ip"))
+	if configErr != nil || host != nil {
+		return fmt.Errorf("dual-boot restart is locked pending explicit authorization")
+	}
 	if !device.GetBool("reboot_only") {
 		return fmt.Errorf("host is not reboot-only")
 	}

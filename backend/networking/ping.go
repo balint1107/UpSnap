@@ -11,11 +11,12 @@ import (
 )
 
 // PingDeviceNetwork checks host reachability independently of a custom readiness
-// command (for example, an SSH login check). SSH stopping is not proof of suspend.
+// command and dual-boot SSH identity. device is borrowed; returns reachability/error.
+// SSH stopping is not proof of suspend; only a raw network probe can confirm it.
 func PingDeviceNetwork(device *core.Record) (bool, error) {
 	probe := core.NewRecord(device.Collection())
 	probe.Set("ip", device.GetString("ip"))
-	return PingDevice(probe)
+	return pingDevice(probe, false)
 }
 
 func isNoRouteOrDownError(err error) bool {

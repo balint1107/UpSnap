@@ -3,6 +3,7 @@
 package networking
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"runtime"
@@ -13,7 +14,25 @@ import (
 	probing "github.com/prometheus-community/pro-bing"
 )
 
+// PingDevice probes device readiness; device is borrowed and never mutated.
+// Returns authenticated readiness (dual-boot profiles when configured), or a probe error.
 func PingDevice(device *core.Record) (bool, error) {
+	return pingDevice(device, true)
+}
+
+// pingDevice probes borrowed device; identity selects authenticated boot readiness or raw network reachability.
+// Returns reachability and a probe error; false identity skips custom commands through the caller's clean record.
+func pingDevice(device *core.Record, identity bool) (bool, error) {
+	if identity {
+		host, cfgErr := BootConfiguration(device.GetString("ip"))
+		if cfgErr != nil {
+			return false, cfgErr
+		}
+		if host != nil {
+			_, err := DetectBootOS(context.Background(), device.GetString("ip"))
+			return err == nil, nil
+		}
+	}
 	ping_cmd := device.GetString("ping_cmd")
 	if ping_cmd == "" {
 		ip, err := ResolveToIPAddr(device.GetString("ip"))

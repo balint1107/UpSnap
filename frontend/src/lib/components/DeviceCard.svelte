@@ -21,9 +21,13 @@
 	import Fa from 'svelte-fa';
 	import toast from 'svelte-french-toast';
 	import DeviceCardNic from './DeviceCardNic.svelte';
+ import DeviceBoot from './DeviceBoot.svelte';
+ import {bootStatuses} from '$lib/stores/boot';
 	import DeviceMetrics from './DeviceMetrics.svelte';
 	import ServiceAvailability from './ServiceAvailability.svelte';
 	import { refreshServices, serviceStatus } from '$lib/stores/services';
+	import { deviceInventory } from '$lib/stores/inventory';
+	import { computerDeviceID } from '$lib/types/inventory';
 	import type { HostMetrics } from '$lib/types/metrics';
 
 	let { device = $bindable() }: { device: Device } = $props();
@@ -31,9 +35,10 @@
 	let metrics: HostMetrics | undefined = $state();
 	let metricsFailed = $state(false);
 	let refreshing = $state(false);
+ const bootPowerUnavailable=$derived(!!device.boot_managed && ((!!$bootStatuses[device.id]?.job && !['ready','failed'].includes($bootStatuses[device.id].job!.stage)) || (device.status==='online' && $bootStatuses[device.id]?.os!=='ubuntu')));
 	const canReboot = $derived(
 		($pocketbase.authStore.isSuperuser || $permission.power?.includes(device.id)) &&
-			(device.reboot_only || device.shutdown_cmd !== '')
+			!device.boot_managed && (device.reboot_only || device.shutdown_cmd !== '')
 	);
 	async function refreshDevice() {
 		if (refreshing) return;
@@ -62,7 +67,8 @@
 			refreshing = false;
 		}
 	}
-	const hostServices = $derived($serviceStatus.services.filter((s) => s.host_ip === device.ip));
+	const common = $derived($deviceInventory.devices.find((entry) => entry.id === computerDeviceID(device.id)));
+	const hostServices = $derived($serviceStatus.services.filter((s) => s.device_id === computerDeviceID(device.id)));
 	let modalReboot: HTMLDialogElement;
 	let modalRename: HTMLDialogElement;
 	let newName = $state('');
@@ -168,10 +174,12 @@
 	class="server-card device-row bg-base-100"
 	bind:open={expanded}
 	data-device={device.name}
+	data-inventory-id={computerDeviceID(device.id)}
+	data-category={common?.category ?? 'computers'}
 	data-state={device.status}
 >
 	<summary class="device-row-summary">
-		<span class="row-host-name" title={device.name}>{device.name}</span>
+		<span class="row-host-name" title={device.name}>{device.name}{#if device.boot_managed}<DeviceBoot {device} compact />{/if}</span>
 		<span class="row-host-ip">{device.ip}</span>
 		<span class="host-state"
 			>{device.status === 'online'
@@ -185,8 +193,8 @@
 		>
 		<DeviceMetrics {device} compact bind:metrics bind:failed={metricsFailed} />
 		<div class="row-power">
-			{#if !device.reboot_only}
-				<DeviceCardNic bind:device compact />
+			{#if common ? common.capabilities.includes('wake') || common.capabilities.includes('suspend') : !device.reboot_only}
+				<DeviceCardNic bind:device compact powerUnavailable={bootPowerUnavailable} />
 			{/if}
 		</div>
 		<div class="row-terminal">
@@ -231,10 +239,11 @@
 				<p class="server-description">{device.description}</p>
 			{/if}
 			<div class="card rounded-box w-full">
-				<DeviceCardNic bind:device onReboot={canReboot ? askRebootConfirmation : undefined} />
+				<DeviceCardNic bind:device powerUnavailable={bootPowerUnavailable} onReboot={canReboot ? askRebootConfirmation : undefined} />
 			</div>
+			{#if device.boot_managed}<DeviceBoot {device} />{/if}
 			<DeviceMetrics {device} collect={false} {metrics} failed={metricsFailed} />
-			<ServiceAvailability hostIp={device.ip} embedded />
+			<ServiceAvailability deviceId={computerDeviceID(device.id)} embedded />
 			{#if device.wake_cron_enabled || device.shutdown_cron_enabled || device.password}
 				<div class="mt-1 flex flex-row flex-wrap gap-2">
 					{#if device.wake_cron_enabled}

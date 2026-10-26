@@ -130,6 +130,18 @@ Connect/Disconnect controls above the remote terminal. Authentication completes
 before opening the remote shell. The password field is cleared when connecting;
 SSH credentials are not entered through an emulated terminal login prompt.
 
+On mobile and short landscape windows, connected sessions collapse the disabled
+credential fields behind Login to leave room for the terminal and keyboard.
+Disconnect stays available; Login expands the same username/password form.
+
+Dual-boot status uses device-read permission; target validation/preparation uses
+device-power permission. Restart also requires explicit Pi/host restart gates,
+verified source identity and a persisted switch job. Dedicated
+monitor keys use fixed forced-command helpers; terminals retain password-only
+login. OS keys are pinned independently and the default terminal username follows
+the authenticated OS. See `docs/dual-boot.md` for the independent write/restart gates.
+
+
 Networking devices use trusted `UPSNAP_ROUTERS_FILE` metadata (default
 `/app/ssh/routers.json`). Router status requires Pi read access; switches require
 Pi power access. Controller SSH keys remain private on the Pi, reached only via

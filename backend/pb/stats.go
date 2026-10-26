@@ -30,6 +30,8 @@ func RequireDeviceReadPermission() *hook.Handler[*core.RequestEvent] {
 	}}
 }
 
+// HandlerHostStats serves authorized device readings for e, or explicit unavailability on Windows.
+// Returns JSON/API errors; never runs the Linux collector on a managed non-Ubuntu host.
 func HandlerHostStats(e *core.RequestEvent) error {
 	e.Response.Header().Set("Cache-Control", "no-store")
 	device, err := e.App.FindRecordById("devices", e.Request.PathValue("id"))
@@ -38,6 +40,16 @@ func HandlerHostStats(e *core.RequestEvent) error {
 	}
 	if device.GetString("status") != "online" {
 		return e.JSON(http.StatusOK, map[string]bool{"available": false})
+	}
+	host, configErr := networking.BootConfiguration(device.GetString("ip"))
+	if configErr != nil {
+		return apis.NewApiError(http.StatusServiceUnavailable, "Boot profiles unavailable.", nil)
+	}
+	if host != nil {
+		name, probeErr := networking.DetectBootOS(e.Request.Context(), device.GetString("ip"))
+		if probeErr != nil || name != "ubuntu" {
+			return e.JSON(http.StatusOK, map[string]any{"available": false, "reason": "Resources are not yet supported on this OS."})
+		}
 	}
 	stats, err := networking.ReadHostStats(e.Request.Context(), device)
 	if err != nil {

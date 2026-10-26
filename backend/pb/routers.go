@@ -12,9 +12,9 @@ import (
 	"regexp"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
-	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
 )
@@ -45,31 +45,33 @@ type RouterDefinition struct {
 
 // RouterReading is a public live diagnostic/control snapshot; nil counters and switches mean unknown.
 type RouterReading struct {
-	LEDControl  bool         `json:"led_control"`
-	ID          string       `json:"id"`
-	Name        string       `json:"name"`
-	IP          string       `json:"ip"`
-	Model       string       `json:"model"`
-	Status      string       `json:"status"`
-	Bands       []RouterBand `json:"bands"`
-	LEDs        *bool        `json:"leds"`
-	LEDScope    string       `json:"led_scope"`
-	LCD         bool         `json:"lcd"`
-	LCDOn       *bool        `json:"lcd_on"`
-	Firmware    string       `json:"firmware"`
-	Uptime      string       `json:"uptime"`
-	Load        []string     `json:"load"`
-	CPU         *string      `json:"cpu"`
-	MemoryTotal *uint64      `json:"memory_total"`
-	MemoryFree  *uint64      `json:"memory_free"`
-	CheckedAt   int64        `json:"checked_at"`
+	Device      *DeviceEnvelope `json:"device,omitempty"`
+	LEDControl  bool            `json:"led_control"`
+	ID          string          `json:"id"`
+	Name        string          `json:"name"`
+	IP          string          `json:"ip"`
+	Model       string          `json:"model"`
+	Status      string          `json:"status"`
+	Bands       []RouterBand    `json:"bands"`
+	LEDs        *bool           `json:"leds"`
+	LEDScope    string          `json:"led_scope"`
+	LCD         bool            `json:"lcd"`
+	LCDOn       *bool           `json:"lcd_on"`
+	Firmware    string          `json:"firmware"`
+	Uptime      string          `json:"uptime"`
+	Load        []string        `json:"load"`
+	CPU         *string         `json:"cpu"`
+	MemoryTotal *uint64         `json:"memory_total"`
+	MemoryFree  *uint64         `json:"memory_free"`
+	CheckedAt   int64           `json:"checked_at"`
 }
 
 var routerIDPattern = regexp.MustCompile(`^[a-z0-9-]{1,40}$`)
 var routerCache = struct {
 	sync.Mutex
-	At     time.Time
-	Values []RouterReading
+	At       time.Time
+	Values   []RouterReading
+	Snapshot atomic.Pointer[[]RouterReading]
 }{}
 
 // routerDefinitions reads a trusted, bounded JSON file; invalid addresses, IDs and SSH algorithms fail closed.
@@ -110,22 +112,15 @@ func routerDefinitions() ([]RouterDefinition, error) {
 
 // routerPermission checks the collecting Pi's read or power relation for authenticated e; no network work occurs on denial.
 func routerPermission(e *core.RequestEvent, power bool) bool {
-	if e.HasSuperuserAuth() {
-		return true
-	}
-	if e.Auth == nil {
-		return false
-	}
-	host, err := e.App.FindFirstRecordByData("devices", "ip", "192.168.50.152")
+	host, err := collectorHost(e.App)
 	if err != nil {
 		return false
 	}
-	field := "read"
+	access := deviceAccess(e, host)
 	if power {
-		field = "power"
+		return access.Control
 	}
-	_, err = e.App.FindFirstRecordByFilter("permissions", "user.id = {:user} && "+field+".id ?= {:host}", dbx.Params{"user": e.Auth.Id, "host": host.Id})
-	return err == nil
+	return access.Read
 }
 
 // routerCommand invokes only the Pi's forced-command dispatcher with validated args, returning at most 256KiB JSON.
@@ -180,9 +175,25 @@ func HandlerRouters(e *core.RequestEvent) error {
 			return apis.NewApiError(503, "Invalid router diagnostics.", nil)
 		}
 		routerCache.Values = result.Routers
+		immutable := append([]RouterReading(nil), result.Routers...)
+		routerCache.Snapshot.Store(&immutable)
 		routerCache.At = sampledAt
 	}
-	return e.JSON(200, map[string]any{"routers": routerCache.Values, "can_control": routerPermission(e, true)})
+	values := make([]RouterReading, 0, len(defs))
+	host, _ := collectorHost(e.App)
+	access := deviceAccess(e, host)
+	for _, def := range defs {
+		for _, cached := range routerCache.Values {
+			if def.ID != cached.ID {
+				continue
+			}
+			common := routerEnvelope(def, &cached, collectorReference(host), access, time.Now())
+			cached.Device = &common
+			values = append(values, cached)
+			break
+		}
+	}
+	return e.JSON(200, map[string]any{"routers": values, "can_control": routerPermission(e, true)})
 }
 
 // validateRouterAction accepts only supported on/off switches and configured radio IDs; it never executes a command.
@@ -257,6 +268,11 @@ func HandlerRouterAction(e *core.RequestEvent) error {
 		return apis.NewApiError(503, "Router returned an invalid state.", nil)
 	}
 	e.App.Logger().Info("Router control", "user", e.Auth.Id, "router", target.ID, "action", action, "state", body.Value)
+	host, _ := collectorHost(e.App)
+	if host != nil {
+		common := routerEnvelope(*target, &reading, deviceReference("computer", host.Id), deviceAccess(e, host), time.Now())
+		reading.Device = &common
+	}
 	return e.JSON(200, reading)
 }
 

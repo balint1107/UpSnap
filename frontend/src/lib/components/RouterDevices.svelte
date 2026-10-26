@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { deviceCategories, type DeviceEnvelope } from '$lib/types/inventory';
+	import ServiceAvailability from './ServiceAvailability.svelte';
 	import { onMount } from 'svelte';
 	import { get } from 'svelte/store';
 	import { resolve } from '$app/paths';
@@ -7,6 +9,7 @@
 	import Fa from 'svelte-fa';
 	type Band = { id: string; name: string; on: boolean | null };
 	type Router = {
+		device: DeviceEnvelope;
 		id: string;
 		name: string;
 		ip: string;
@@ -121,22 +124,22 @@
 </script>
 
 <section class="networking" aria-label="Networking devices">
-	<h2>Networking</h2>
+	<h2>{deviceCategories.networking}</h2>
 	{#if error}<p role="alert">{error}</p>{/if}
 	{#if failed}<p role="status">Router diagnostics unavailable. Previous readings are stale.</p>{/if}
 	{#each visible as router (router.id)}
-		{@const ready = !failed && router.status === 'online'}
+		{@const ready = !failed && router.device.state === 'online'}
 		<details
 			class="server-card device-row bg-base-100 router-row"
-			data-router={router.id}
-			data-state={ready ? 'online' : 'offline'}
+			data-router={router.id} data-inventory-id={router.device.id} data-category={router.device.category}
+			data-state={failed ? 'stale' : router.device.state}
 		>
 			<summary class="device-row-summary">
 				<span class="row-host-name">{router.name}</span><span class="row-host-ip">{router.ip}</span>
 				<span class="host-state"
 					>{pending === router.id
 						? 'Updating…'
-						: failed
+						: failed || router.device.state === 'stale'
 							? 'Stale'
 							: ready
 								? 'SSH ready'
@@ -152,12 +155,12 @@
 								: '—'}</strong
 						></span
 					><span
-						>{router.lcd && !router.led_control ? 'LCD' : 'LED'}
+						>{router.lcd && !router.device.capabilities.includes('leds') ? 'LCD' : 'LED'}
 						<strong
 							>{ready
-								? router.lcd && !router.led_control
+								? router.lcd && !router.device.capabilities.includes('leds')
 									? switchState(router.lcd_on)
-									: router.led_control
+									: router.device.capabilities.includes('leds')
 										? switchState(router.leds)
 										: '—'
 								: '—'}</strong
@@ -207,7 +210,7 @@
 					<div class="switch-item">
 						<span
 							>LEDs<small
-								>{router.led_scope}{#if router.led_control}
+								>{router.led_scope}{#if router.device.capabilities.includes('leds')}
 									· {ready ? switchState(router.leds) : 'Unavailable'}{/if}</small
 							></span
 						><button
@@ -217,7 +220,7 @@
 							aria-checked={router.leds === true}
 							class="router-switch"
 							class:on={router.leds === true}
-							disabled={!ready || !canControl || !!pending || !router.led_control}
+							disabled={!ready || !canControl || !!pending || !router.device.capabilities.includes('leds')}
 							onclick={() => change(router.id, 'leds', router.leds !== true)}><span></span></button
 						>
 					</div>
@@ -251,12 +254,13 @@
 					>
 				</div>
 				<p class="checked">
-					Checked {new Date(router.checked_at * 1000).toLocaleString('en-GB', {
+					Checked {new Date(router.device.checked_at ?? 0).toLocaleString('en-GB', {
 						timeZone: 'Europe/Budapest'
 					})}{#if router.id === 'home-asus'}
 						· Wi-Fi state follows the configured radio policy.{/if}
 				</p>
 			</div>
+		<ServiceAvailability deviceId={router.device.id} embedded />
 		</details>
 	{:else}<p>
 			{failed

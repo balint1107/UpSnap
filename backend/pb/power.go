@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
 )
@@ -41,16 +40,18 @@ type PlugReading struct {
 
 // PowerDevice separates a read-only outlet from SSH-managed hosts and their controls.
 type PowerDevice struct {
-	ID        string        `json:"id"`
-	Name      string        `json:"name"`
-	IP        string        `json:"ip"`
-	HostIP    string        `json:"host_ip"`
-	Status    string        `json:"status"`
-	Detail    string        `json:"detail"`
-	CheckedAt time.Time     `json:"checked_at"`
-	Reading   PlugReading   `json:"reading"`
-	History   []PowerSample `json:"history"`
-	Daily     []EnergyDay   `json:"daily"`
+	Device            *DeviceEnvelope `json:"device,omitempty"`
+	CollectorDeviceID string          `json:"collector_device_id,omitempty"`
+	ID                string          `json:"id"`
+	Name              string          `json:"name"`
+	IP                string          `json:"ip"`
+	HostIP            string          `json:"host_ip"`
+	Status            string          `json:"status"`
+	Detail            string          `json:"detail"`
+	CheckedAt         time.Time       `json:"checked_at"`
+	Reading           PlugReading     `json:"reading"`
+	History           []PowerSample   `json:"history"`
+	Daily             []EnergyDay     `json:"daily"`
 }
 
 // PowerSnapshot is the Pi collector's bounded power-device export.
@@ -109,15 +110,17 @@ func HandlerPower(e *core.RequestEvent) error {
 	}
 	visible := make([]PowerDevice, 0, len(value.Devices))
 	for _, plug := range value.Devices {
-		host, err := e.App.FindFirstRecordByData("devices", "ip", plug.HostIP)
+		host, err := inventoryHost(e.App, plug.CollectorDeviceID, plug.HostIP)
 		if err != nil {
 			continue
 		}
-		if !e.HasSuperuserAuth() {
-			if _, err := e.App.FindFirstRecordByFilter("permissions", "user.id = {:user} && read.id ?= {:device}", dbx.Params{"user": e.Auth.Id, "device": host.Id}); err != nil {
-				continue
-			}
+		access := deviceAccess(e, host)
+		if !access.Read {
+			continue
 		}
+		plug.CollectorDeviceID = deviceReference("computer", host.Id)
+		common := powerEnvelope(plug, plug.CollectorDeviceID, access, time.Now())
+		plug.Device = &common
 		visible = append(visible, plug)
 	}
 	value.Devices = visible

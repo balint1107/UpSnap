@@ -23,7 +23,8 @@ import (
 
 var Version = "(untracked)"
 
-// StartPocketBase registers dashboard APIs and serves the embedded application.
+// StartPocketBase borrows distDirFS for static assets, registers dashboard APIs and starts serving.
+// Returns initialization or server errors; managed dual-boot restart routes remain locked.
 func StartPocketBase(distDirFS fs.FS) error {
 	if err := logging.ConfigureConsole(os.Getenv("UPSNAP_LOG_LEVEL")); err != nil {
 		return err
@@ -87,16 +88,19 @@ func StartPocketBase(distDirFS fs.FS) error {
 		se.Router.GET("/{path...}", apis.Static(distDirFS, true))
 		se.Router.GET("/api/upsnap/wake/{id}", HandlerWake).Bind(RequireUpSnapPermission()).Bind(RequireWakeSuspendAllowed())
 		se.Router.GET("/api/upsnap/stats/{id}", HandlerHostStats).Bind(RequireDeviceReadPermission())
+		se.Router.GET("/api/upsnap/devices", HandlerDeviceInventory).Bind(apis.RequireAuth())
 		se.Router.GET("/api/upsnap/services", HandlerServices).Bind(apis.RequireAuth())
 		se.Router.GET("/api/upsnap/power", HandlerPower).Bind(apis.RequireAuth())
 		se.Router.GET("/api/upsnap/routers", HandlerRouters).Bind(apis.RequireAuth())
 		se.Router.POST("/api/upsnap/routers/{router}/{action}", HandlerRouterAction).Bind(apis.RequireAuth())
+		se.Router.GET("/api/upsnap/boot/{id}", HandlerBootStatus).Bind(RequireDeviceReadPermission())
+		se.Router.POST("/api/upsnap/boot/{id}/{action}", HandlerBootTarget).Bind(RequireUpSnapPermission())
 		se.Router.GET("/api/upsnap/terminal/devices/{id}", HandlerTerminalDevice).Bind(apis.RequireAuth())
 		se.Router.GET("/api/upsnap/terminal/connect", HandlerTerminal)
 		se.Router.POST("/api/upsnap/rename/{id}", HandlerRenameDevice).Bind(RequireDeviceReadPermission())
 		se.Router.GET("/api/upsnap/wakegroup/{id}", HandlerWakeGroup).Bind(RequireUpSnapPermission())
 		se.Router.GET("/api/upsnap/sleep/{id}", HandlerSleep).Bind(RequireUpSnapPermission()).Bind(RequireWakeSuspendAllowed())
-		se.Router.GET("/api/upsnap/reboot/{id}", HandlerReboot).Bind(RequireUpSnapPermission())
+		se.Router.GET("/api/upsnap/reboot/{id}", HandlerReboot).Bind(RequireUpSnapPermission()).Bind(RequireBootRestartLock())
 		se.Router.GET("/api/upsnap/shutdown/{id}", HandlerShutdown).Bind(RequireUpSnapPermission()).Bind(RequireWakeSuspendAllowed())
 		se.Router.GET("/api/upsnap/shutdowngroup/{id}", HandlerShutdownGroup).Bind(RequireUpSnapPermission())
 		se.Router.GET("/api/upsnap/scan", HandlerScan).Bind(RequireScanDevicesPermission())

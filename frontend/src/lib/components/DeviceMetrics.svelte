@@ -27,6 +27,7 @@
 	function size(bytes: number) {
 		return `${(bytes / 1024 ** 3).toFixed(1)} GiB`;
 	}
+	/** Refresh this device's readings when online; clear unavailable data and report failure without retaining stale OS metrics. */
 	async function refresh() {
 		if (!collect || device.status !== 'online' || fetching) return;
 		fetching = true;
@@ -38,8 +39,8 @@
 			});
 			if (!response.ok) throw new Error('Metrics unavailable');
 			const reading = (await response.json()) as HostMetrics;
-			if (reading.available) metrics = reading;
-			failed = false;
+			metrics = reading.available ? reading : undefined;
+			failed = !reading.available;
 		} catch (error) {
 			if (!(error instanceof DOMException && error.name === 'AbortError')) failed = true;
 		} finally {

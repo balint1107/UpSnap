@@ -1,8 +1,11 @@
+import type { DeviceState } from '$lib/types/inventory';
 import { browser } from '$app/environment';
 import { get, writable } from 'svelte/store';
 import { backendUrl, pocketbase } from './pocketbase';
 
 export type Service = {
+	device_id: string;
+	state: DeviceState;
 	id: string;
 	name: string;
 	host_name: string;
