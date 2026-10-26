@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths';
 	import DeviceCard from '$lib/components/DeviceCard.svelte';
 	import PowerDevices from '$lib/components/PowerDevices.svelte';
+	import RouterDevices from '$lib/components/RouterDevices.svelte';
 	import PageLoading from '$lib/components/PageLoading.svelte';
 	import { m } from '$lib/paraglide/messages';
 	import { localeStore } from '$lib/stores/locale';
@@ -170,10 +171,10 @@
 	<div class="monitor-header">
 		<div>
 			<div class="monitor-eyebrow">Home infrastructure</div>
-			<h1>Server overview</h1>
+			<h1>Devices</h1>
 		</div>
-		<div class="monitor-summary" aria-label="Server status summary">
-			<span><strong>{devices.length}</strong> hosts</span>
+		<div class="monitor-summary" aria-label="Computer status summary">
+			<span><strong>{devices.length}</strong> computers</span>
 			<span><strong>{devices.filter((d) => d.status === 'online').length}</strong> SSH ready</span>
 			<span><strong>{devices.filter((d) => d.status === 'offline').length}</strong> offline</span>
 		</div>
@@ -232,6 +233,7 @@
 			</button>
 		</div>
 	</div>
+	<h2 class="mb-3 text-lg font-semibold">Computers</h2>
 	{#if orderByGroups}
 		<div class="space-y-6">
 			{#if devicesWithoutGroups.length > 0}
@@ -295,7 +297,7 @@
 	</div>
 {/if}
 
-{#if !loading}<PowerDevices search={searchQuery} />{/if}
+{#if !loading}<RouterDevices search={searchQuery} /><PowerDevices search={searchQuery} />{/if}
 
 <dialog class="modal" bind:this={modalShutdownGroup}>
 	<div class="modal-box">

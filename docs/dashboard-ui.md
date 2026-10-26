@@ -219,3 +219,60 @@ Verified production ARM64 deployment with real P115 readings, persistent samples
 Devices/Services placement and 1440px/390px layouts. Backend/networking tests,
 15 collector tests and production frontend build pass. Full Svelte checking still
 reports the existing generated Paraglide `async_hooks` type error only.
+
+Chart refinement: plots now use the full measured card width with fixed-size
+11px labels and a compact 190px plotting area, avoiding SVG letterboxing and
+oversized desktop labels. Power uses padded, rounded bounds around observed
+readings (a nonzero baseline is possible); energy bars retain zero. Axes have
+regular numeric ticks with 0.1 W / 0.001 kWh labels and intermediate time ticks.
+The displayed time range fits available history up to the retention window,
+so a newly enabled monitor does not compress samples against the right edge.
+Scale tests cover small variations, zero/flat data, invalid values and bar baselines.
+
+Verified against real history at 1440px/390px: full-width plots, decimal labels,
+unique daily bar labels and no horizontal overflow. Four scale tests, frontend
+production build and backend/networking suites passed. No power commands were issued.
+
+
+## Device categories and router controls
+
+Devices is divided into Computers (the existing three SSH hosts), Networking
+(four configured routers) and Home appliances (P115). Each router uses the same
+compact disclosure-row layout and password-terminal icon. Its dropdown includes
+firmware, uptime, CPU/load, memory, radio/LED state, Refresh and supported toggles.
+Unsupported MikroTik radios/LED blackout are omitted or disabled; its LCD has a
+separate switch. The older ASUS explicitly labels its LED switch Power LED only
+and its Wi-Fi readback as firmware policy, not a hardware measurement.
+
+Router status inherits Pi read permission; mutation additionally requires Pi
+power permission and validates fixed IDs/actions/bands in both Go and the Pi
+helper. No arbitrary shell command is accepted. Switches show pending state and
+update from the observed response. Shared 30-second status polling pauses when
+hidden; failures mark retained values stale and disable controls. Router terminals
+retain independent password-only login for signed-in users, pinned host keys and
+session limits. Per-router custom SSH ports and legacy algorithms are explicit,
+leaving the computers' Ed25519 policy intact. See deployment
+`monitor/routers/README.md` for setup, hardware limits and restoration checks.
+
+
+Networking verification: the live page contains 3 computer rows, 4 router rows
+and 1 appliance row, with four router terminal links and no 390px overflow.
+A real browser LED cycle confirmed off/on readback and restored on. Anonymous
+router APIs return 401; unsupported/injected switches return 400. A temporary
+read-only account could read diagnostics but not mutate (403), while signed-in
+terminal metadata remained available without device grants. Test accounts were
+removed. Real pinned SSH/password-method negotiation passed for all four routers;
+actual user-password shell login remains a private user check. Five controller
+unit tests and backend/networking suites pass; production build passes and full
+Svelte checking retains only the generated `async_hooks` error. Snapshot cache age
+starts at sampling time so 30s polls do not repeatedly reuse old readings; reads
+started before a toggle cannot overwrite its observed response.
+
+A browser-only delayed-read fixture confirmed an older GET cannot overwrite a
+completed toggle; the fixture made no hardware changes and was removed before
+returning to live readings. Router terminal buttons reuse the computer row's
+40px icon-button style. All three section headers and router diagnostics were
+visually checked on desktop and mobile.
+
+A live 31-second check observed the router snapshot timestamp advance by 30s;
+all four routers remained online with tested radio/indicator states restored.

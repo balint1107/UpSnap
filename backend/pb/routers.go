@@ -1,0 +1,305 @@
+package pb
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"os"
+	"os/exec"
+	"regexp"
+	"strconv"
+	"sync"
+	"time"
+
+	"github.com/pocketbase/dbx"
+	"github.com/pocketbase/pocketbase/apis"
+	"github.com/pocketbase/pocketbase/core"
+)
+
+// RouterBand identifies a configured radio; ID is a fixed helper argument, never a shell fragment.
+type RouterBand struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Interface string `json:"interface"`
+	On        *bool  `json:"on"`
+}
+
+// RouterDefinition supplies public metadata and pinned SSH algorithms, without router passwords/control keys.
+type RouterDefinition struct {
+	LEDControl bool         `json:"led_control"`
+	ID         string       `json:"id"`
+	Name       string       `json:"name"`
+	IP         string       `json:"ip"`
+	Port       int          `json:"port"`
+	Username   string       `json:"username"`
+	Platform   string       `json:"platform"`
+	Model      string       `json:"model"`
+	Bands      []RouterBand `json:"bands"`
+	LEDScope   string       `json:"led_scope"`
+	LCD        bool         `json:"lcd"`
+	Algorithms []string     `json:"host_key_algorithms"`
+}
+
+// RouterReading is a public live diagnostic/control snapshot; nil counters and switches mean unknown.
+type RouterReading struct {
+	LEDControl  bool         `json:"led_control"`
+	ID          string       `json:"id"`
+	Name        string       `json:"name"`
+	IP          string       `json:"ip"`
+	Model       string       `json:"model"`
+	Status      string       `json:"status"`
+	Bands       []RouterBand `json:"bands"`
+	LEDs        *bool        `json:"leds"`
+	LEDScope    string       `json:"led_scope"`
+	LCD         bool         `json:"lcd"`
+	LCDOn       *bool        `json:"lcd_on"`
+	Firmware    string       `json:"firmware"`
+	Uptime      string       `json:"uptime"`
+	Load        []string     `json:"load"`
+	CPU         *string      `json:"cpu"`
+	MemoryTotal *uint64      `json:"memory_total"`
+	MemoryFree  *uint64      `json:"memory_free"`
+	CheckedAt   int64        `json:"checked_at"`
+}
+
+var routerIDPattern = regexp.MustCompile(`^[a-z0-9-]{1,40}$`)
+var routerCache = struct {
+	sync.Mutex
+	At     time.Time
+	Values []RouterReading
+}{}
+
+// routerDefinitions reads a trusted, bounded JSON file; invalid addresses, IDs and SSH algorithms fail closed.
+func routerDefinitions() ([]RouterDefinition, error) {
+	filename := os.Getenv("UPSNAP_ROUTERS_FILE")
+	if filename == "" {
+		filename = "/app/ssh/routers.json"
+	}
+	f, err := os.Open(filename)
+	if os.IsNotExist(err) {
+		return []RouterDefinition{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	var values []RouterDefinition
+	if err := json.NewDecoder(io.LimitReader(f, 65536)).Decode(&values); err != nil {
+		return nil, err
+	}
+	if len(values) > 8 {
+		return nil, fmt.Errorf("too many routers")
+	}
+	seen := map[string]bool{}
+	for _, r := range values {
+		if !routerIDPattern.MatchString(r.ID) || seen[r.ID] || net.ParseIP(r.IP) == nil || r.Port < 1 || r.Port > 65535 || len(r.Algorithms) == 0 {
+			return nil, fmt.Errorf("invalid router definition")
+		}
+		seen[r.ID] = true
+		for _, a := range r.Algorithms {
+			if a != "ssh-ed25519" && a != "ssh-rsa" && a != "ecdsa-sha2-nistp256" && a != "ecdsa-sha2-nistp384" && a != "ecdsa-sha2-nistp521" {
+				return nil, fmt.Errorf("unsupported pinned host key")
+			}
+		}
+	}
+	return values, nil
+}
+
+// routerPermission checks the collecting Pi's read or power relation for authenticated e; no network work occurs on denial.
+func routerPermission(e *core.RequestEvent, power bool) bool {
+	if e.HasSuperuserAuth() {
+		return true
+	}
+	if e.Auth == nil {
+		return false
+	}
+	host, err := e.App.FindFirstRecordByData("devices", "ip", "192.168.50.152")
+	if err != nil {
+		return false
+	}
+	field := "read"
+	if power {
+		field = "power"
+	}
+	_, err = e.App.FindFirstRecordByFilter("permissions", "user.id = {:user} && "+field+".id ?= {:host}", dbx.Params{"user": e.Auth.Id, "host": host.Id})
+	return err == nil
+}
+
+// routerCommand invokes only the Pi's forced-command dispatcher with validated args, returning at most 256KiB JSON.
+// ctx bounds the entire SSH round trip; errors hide router/controller stderr and credentials.
+func routerCommand(ctx context.Context, args ...string) ([]byte, error) {
+	cfg := os.Getenv("UPSNAP_STATS_SSH_CONFIG")
+	if cfg == "" {
+		return nil, fmt.Errorf("router controller not configured")
+	}
+	command := "router"
+	for _, arg := range args {
+		if !routerIDPattern.MatchString(arg) {
+			return nil, fmt.Errorf("invalid command argument")
+		}
+		command += " " + arg
+	}
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "ssh", "-F", cfg, "-o", "ConnectTimeout=3", "192.168.50.152", command).Output()
+	if err != nil || len(out) > 262144 {
+		return nil, fmt.Errorf("router controller unavailable")
+	}
+	return out, nil
+}
+
+// HandlerRouters serves shared 30s diagnostics to Pi readers and reports whether control permission is granted.
+func HandlerRouters(e *core.RequestEvent) error {
+	e.Response.Header().Set("Cache-Control", "no-store")
+	if !routerPermission(e, false) {
+		return apis.NewForbiddenError("Networking access denied.", nil)
+	}
+	defs, err := routerDefinitions()
+	if err != nil {
+		return apis.NewApiError(503, "Router configuration unavailable.", nil)
+	}
+	if len(defs) == 0 {
+		return e.JSON(200, map[string]any{"routers": []RouterReading{}, "can_control": false})
+	}
+	routerCache.Lock()
+	defer routerCache.Unlock()
+	force := e.Request.URL.Query().Get("refresh") == "1" && time.Since(routerCache.At) > 2*time.Second
+	if routerCache.Values == nil || time.Since(routerCache.At) >= 29*time.Second || force {
+		sampledAt := time.Now()
+		out, err := routerCommand(e.Request.Context(), "status")
+		if err != nil {
+			return apis.NewApiError(503, "Router diagnostics unavailable.", nil)
+		}
+		var result struct {
+			Routers []RouterReading `json:"routers"`
+		}
+		if json.Unmarshal(out, &result) != nil || len(result.Routers) > 8 {
+			return apis.NewApiError(503, "Invalid router diagnostics.", nil)
+		}
+		routerCache.Values = result.Routers
+		routerCache.At = sampledAt
+	}
+	return e.JSON(200, map[string]any{"routers": routerCache.Values, "can_control": routerPermission(e, true)})
+}
+
+// validateRouterAction accepts only supported on/off switches and configured radio IDs; it never executes a command.
+func validateRouterAction(r RouterDefinition, action, value, band string) error {
+	if value != "on" && value != "off" {
+		return fmt.Errorf("invalid switch state")
+	}
+	if action == "wifi" {
+		for _, b := range r.Bands {
+			if b.ID == band {
+				return nil
+			}
+		}
+		return fmt.Errorf("unsupported radio")
+	}
+	if band != "" {
+		return fmt.Errorf("unexpected radio")
+	}
+	if action == "lcd" && r.LCD {
+		return nil
+	}
+	if action == "leds" && r.LEDControl && r.Platform != "routeros" {
+		return nil
+	}
+	return fmt.Errorf("unsupported switch")
+}
+
+// HandlerRouterAction applies a validated, power-authorized toggle and returns observed state; errors never imply success.
+func HandlerRouterAction(e *core.RequestEvent) error {
+	if !routerPermission(e, true) {
+		return apis.NewForbiddenError("Router control permission required.", nil)
+	}
+	defs, err := routerDefinitions()
+	if err != nil {
+		return apis.NewApiError(503, "Router configuration unavailable.", nil)
+	}
+	var target *RouterDefinition
+	for i := range defs {
+		if defs[i].ID == e.Request.PathValue("router") {
+			target = &defs[i]
+		}
+	}
+	if target == nil {
+		return apis.NewNotFoundError("Router unavailable.", nil)
+	}
+	var body struct {
+		Value string `json:"value"`
+		Band  string `json:"band"`
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(e.Response, e.Request.Body, 1024))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&body) != nil || decoder.Decode(&struct{}{}) != io.EOF {
+		return apis.NewBadRequestError("Invalid switch request.", nil)
+	}
+	action := e.Request.PathValue("action")
+	if validateRouterAction(*target, action, body.Value, body.Band) != nil {
+		return apis.NewBadRequestError("Unsupported router switch.", nil)
+	}
+	args := []string{target.ID, action, body.Value}
+	if action == "wifi" {
+		args = append(args, body.Band)
+	}
+	routerCache.Lock()
+	defer routerCache.Unlock()
+	routerCache.At = time.Time{}
+	out, err := routerCommand(e.Request.Context(), args...)
+	if err != nil {
+		return apis.NewApiError(503, "Router operation failed; refresh to check state.", nil)
+	}
+	var reading RouterReading
+	if json.Unmarshal(out, &reading) != nil || reading.ID != target.ID {
+		return apis.NewApiError(503, "Router returned an invalid state.", nil)
+	}
+	e.App.Logger().Info("Router control", "user", e.Auth.Id, "router", target.ID, "action", action, "state", body.Value)
+	return e.JSON(200, reading)
+}
+
+// routerByTarget finds the allowlisted router matching an SSH host:port; unknown targets use the computer policy.
+func routerByTarget(target string) *RouterDefinition {
+	defs, err := routerDefinitions()
+	if err != nil {
+		return nil
+	}
+	for i := range defs {
+		if net.JoinHostPort(defs[i].IP, strconv.Itoa(defs[i].Port)) == target {
+			return &defs[i]
+		}
+	}
+	return nil
+}
+
+// routerTerminalRecord creates unsaved terminal metadata for a configured router after a bounded TCP readiness check.
+// No persistent host or power-control record is created; returned records are owned by the caller.
+func routerTerminalRecord(app core.App, id string) (*core.Record, string, error) {
+	defs, err := routerDefinitions()
+	if err != nil {
+		return nil, "", err
+	}
+	for _, r := range defs {
+		if r.ID == id {
+			target := net.JoinHostPort(r.IP, strconv.Itoa(r.Port))
+			conn, err := net.DialTimeout("tcp", target, 3*time.Second)
+			if err != nil {
+				return nil, "", fmt.Errorf("router SSH unavailable")
+			}
+			conn.Close()
+			collection, err := app.FindCollectionByNameOrId("devices")
+			if err != nil {
+				return nil, "", err
+			}
+			d := core.NewRecord(collection)
+			d.Id = r.ID
+			d.Set("name", r.Name)
+			d.Set("ip", r.IP)
+			d.Set("status", "online")
+			return d, target, nil
+		}
+	}
+	return nil, "", nil
+}

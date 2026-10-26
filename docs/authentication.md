@@ -129,3 +129,13 @@ The terminal page retains separate SSH username/password fields and
 Connect/Disconnect controls above the remote terminal. Authentication completes
 before opening the remote shell. The password field is cleared when connecting;
 SSH credentials are not entered through an emulated terminal login prompt.
+
+Networking devices use trusted `UPSNAP_ROUTERS_FILE` metadata (default
+`/app/ssh/routers.json`). Router status requires Pi read access; switches require
+Pi power access. Controller SSH keys remain private on the Pi, reached only via
+the existing forced-command key with bounded `router` requests. Router terminals
+use typed SSH passwords exclusively, with the configured port, default username
+and exact pinned host-key algorithm. RSA/ECDSA and group14-sha1 compatibility are
+allowed only for configured legacy routers, never a fallback for computer hosts.
+MikroTik's `always-allow-password-login` is enabled so terminals remain usable
+alongside existing keys; its controller uses a separate limited-policy user.

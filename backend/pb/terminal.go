@@ -109,8 +109,11 @@ func terminalTarget(ip string) (string, error) {
 // terminalSize rejects malformed resize frames before forwarding a PTY window change.
 func terminalSize(cols, rows int) bool { return cols >= 2 && cols <= 500 && rows >= 2 && rows <= 250 }
 
-// terminalDevice checks configuration and current readiness without requiring device read/power grants.
+// terminalDevice resolves configured router/computer IDs and readiness for any signed-in account; no power grants are required.
 func terminalDevice(app core.App, id string) (*core.Record, string, error) {
+	if d, target, err := routerTerminalRecord(app, id); err != nil || d != nil {
+		return d, target, err
+	}
 	d, err := app.FindRecordById("devices", id)
 	if err != nil {
 		return nil, "", errors.New("device unavailable")
@@ -125,28 +128,39 @@ func terminalDevice(app core.App, id string) (*core.Record, string, error) {
 	return d, target, nil
 }
 
-// HandlerTerminalDevice exposes terminal metadata to any signed-in monitor user.
+// HandlerTerminalDevice returns metadata and the configured SSH username for signed-in users.
+// Returns JSON or an API error; no SSH credentials or power commands are sent.
 func HandlerTerminalDevice(e *core.RequestEvent) error {
-	d, _, err := terminalDevice(e.App, e.Request.PathValue("id"))
+	d, target, err := terminalDevice(e.App, e.Request.PathValue("id"))
 	if err != nil {
 		return apis.NewApiError(http.StatusConflict, err.Error(), nil)
 	}
 	e.Response.Header().Set("Cache-Control", "no-store")
-	return e.JSON(http.StatusOK, map[string]string{"id": d.Id, "name": d.GetString("name"), "ip": d.GetString("ip")})
+	username := "balint"
+	if router := routerByTarget(target); router != nil {
+		username = router.Username
+	}
+	return e.JSON(http.StatusOK, map[string]string{"id": d.Id, "name": d.GetString("name"), "ip": d.GetString("ip"), "username": username})
 }
 
-// passwordSSH connects using only the supplied password and a pinned Ed25519 host key; no agent or keys are used.
+// passwordSSH connects with the supplied password and pinned host key; router-only legacy algorithms are explicitly allowlisted.
+// target/user/password are connection inputs; hosts is the pinned known-hosts file. Returns an owned client or an error; no keys/agent are used.
 func passwordSSH(target, user, password, hosts string) (*ssh.Client, error) {
 	callback, err := knownhosts.New(hosts)
 	if err != nil {
 		return nil, err
 	}
 	config := &ssh.ClientConfig{User: user, Auth: []ssh.AuthMethod{ssh.Password(password)}, HostKeyCallback: callback, HostKeyAlgorithms: []string{ssh.KeyAlgoED25519}, Timeout: 8 * time.Second}
+	if router := routerByTarget(target); router != nil {
+		config.HostKeyAlgorithms = router.Algorithms
+		config.Timeout = 15 * time.Second
+		config.Config.KeyExchanges = append(ssh.SupportedAlgorithms().KeyExchanges, "diffie-hellman-group14-sha1")
+	}
 	connection, err := net.DialTimeout("tcp", target, 5*time.Second)
 	if err != nil {
 		return nil, err
 	}
-	_ = connection.SetDeadline(time.Now().Add(8 * time.Second))
+	_ = connection.SetDeadline(time.Now().Add(config.Timeout))
 	c, channels, requests, err := ssh.NewClientConn(connection, target, config)
 	if err != nil {
 		connection.Close()

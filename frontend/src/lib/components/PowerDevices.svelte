@@ -77,6 +77,7 @@
 {#if failed && devices.length === 0}<p class="power-error" role="status">
 		Power device readings unavailable.
 	</p>{/if}
+{#if visible.length}<h2 class="appliance-heading">Home appliances</h2>{/if}
 {#each visible as device (device.id)}
 	{@const fresh = !failed && device.status === 'up'}
 	<details
@@ -147,6 +148,12 @@
 {/each}
 
 <style>
+	.appliance-heading {
+		margin-top: 2rem;
+		margin-bottom: 0.75rem;
+		font-size: 1.1rem;
+		font-weight: 650;
+	}
 	.power-device {
 		margin-top: 0.75rem;
 	}

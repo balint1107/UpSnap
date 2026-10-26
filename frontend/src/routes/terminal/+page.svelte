@@ -101,6 +101,7 @@
 				const [{ Terminal }, { FitAddon }] = await Promise.all([import('@xterm/xterm'), import('@xterm/addon-fit')]);
 				if (disposed) return;
 				device = reading;
+				username = reading.username || 'balint';
 				terminal = new Terminal({ cursorBlink: true, fontSize: 14, scrollback: 3000,
 					theme: { background: '#101923', foreground: '#e7eef5' } });
 				fit = new FitAddon();
