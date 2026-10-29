@@ -1,5 +1,7 @@
 <script lang="ts">
-	import { powerScale } from '$lib/utils/powerScale';
+	import { powerHistory, powerScale } from '$lib/utils/powerScale';
+	const instanceId = $props.id();
+	const clipId = `power-plot-${instanceId}`;
 	let width = $state(600);
 	const plotWidth = $derived(Math.max(260, width - 32));
 	const left = 56;
@@ -8,19 +10,10 @@
 		points,
 		kind = 'power'
 	}: { points: { t: number; value: number }[]; kind?: 'power' | 'energy' } = $props();
-	const valid = $derived(
-		points.filter((p) => Number.isFinite(p.t) && Number.isFinite(p.value) && p.value >= 0)
-	);
-	const end = $derived(
-		kind === 'energy'
-			? Math.max(0, ...valid.map((p) => p.t)) + 43200
-			: Math.max(Date.now() / 1000, ...valid.map((p) => p.t))
-	);
-	const start = $derived(
-		kind === 'power'
-			? Math.max(end - 86400, Math.min(end - 300, ...valid.map((p) => p.t)))
-			: Math.max(end - 30 * 86400, Math.min(...valid.map((p) => p.t)) - 43200)
-	);
+	const history = $derived(powerHistory(points, kind));
+	const valid = $derived(history.points);
+	const start = $derived(history.start);
+	const end = $derived(history.end);
 	const scale = $derived(
 		powerScale(
 			valid.map((p) => p.value),
@@ -77,12 +70,18 @@
 				? 'Recorded power in watts over the last 24 hours'
 				: 'Observed daily energy totals in kilowatt-hours'}
 		>
+			<defs>
+				<clipPath id={clipId}>
+					<rect x={left} y="20" width={right - left} height="130" />
+				</clipPath>
+			</defs>
 			{#each scale.ticks as tick}
 				<line x1={left} x2={right} y1={y(tick)} y2={y(tick)} class="grid" />
 				<text x={left - 8} y={y(tick) + 4} text-anchor="end"
 					>{tick.toFixed(kind === 'power' ? 1 : 3)}</text
 				>
 			{/each}
+			<g clip-path={`url(#${clipId})`}>
 			{#if kind === 'power'}
 				<path d={line()} class="trace" />
 				{#each valid as p}<circle
@@ -101,6 +100,7 @@
 						class="point"><title>{label(p.t)} · {p.value.toFixed(3)} kWh</title></rect
 					>{/each}
 			{/if}
+			</g>
 			{#each times as time, i}
 				<text
 					x={x(time)}

@@ -317,3 +317,17 @@ router/appliance details, rather than IP comparisons. Driver-specific rows, char
 password terminals and action authorization remain in place. Legacy driver payloads
 are preserved for compatibility; inventory polling is visible-page-only every 30s and
 reads cached metadata, without adding SSH probes.
+
+
+Chart boundary correction: discard samples outside the displayed 24h/30d range
+before computing axes, ticks and paths, including when retained history becomes
+older than the browser's current window. Power excludes future samples and sorts
+visible observations without bridging collection gaps. Each chart has its own SVG
+clip rectangle for traces, markers and bars, so strokes cannot overlap axis labels.
+Regression tests cover expired extrema, exact time boundaries, future/invalid data,
+sparse/empty histories, sorting and the energy window.
+
+Verification: seven numeric/window regression tests and the production build pass.
+At 1440px and 390px, browser-only injected 26-hour-old and future outliers were
+excluded, all visible power points stayed within the plotting coordinates, and
+both chart clip IDs resolved independently. No hardware controls were used.

@@ -21,3 +21,24 @@ export function powerScale(values: number[], energy = false) {
 	);
 	return { min, max, ticks };
 }
+
+/** Select and sort observations inside the displayed history window before scaling or drawing.
+ * @param points Samples with Unix-second t and nonnegative watts/kWh value; invalid samples are ignored.
+ * @param kind Power uses a trailing 24h window; energy retains 30 days around the latest calendar total.
+ * @param now Current Unix seconds for power's right edge (injectable for deterministic tests).
+ * @returns Visible points and finite start/end Unix seconds; sparse power history keeps a minimum 5min span.
+ */
+export function powerHistory(
+	points: { t: number; value: number }[],
+	kind: 'power' | 'energy' = 'power',
+	now = Date.now() / 1000
+) {
+	const valid = points.filter((p) => Number.isFinite(p.t) && Number.isFinite(p.value) && p.value >= 0);
+	const end = kind === 'power' ? now : Math.max(...valid.map((p) => p.t), valid.length ? -Infinity : now) + 43200;
+	const cutoff = end - (kind === 'power' ? 86400 : 30 * 86400);
+	const visible = valid.filter((p) => p.t >= cutoff && p.t <= end).sort((a, b) => a.t - b.t);
+	const start = kind === 'power'
+		? Math.max(cutoff, Math.min(end - 300, ...visible.map((p) => p.t)))
+		: Math.max(cutoff, visible.length ? visible[0].t - 43200 : end - 86400);
+	return { points: visible, start, end };
+}
