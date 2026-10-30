@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ServiceRouting from './ServiceRouting.svelte';
 	import { serviceStatus, refreshServices } from '$lib/stores/services';
 	let { deviceId, embedded = false }: { deviceId?: string; embedded?: boolean } = $props();
 	const services = $derived($serviceStatus.services.filter((s) => !deviceId || s.device_id === deviceId));
@@ -42,6 +43,7 @@
 	{#if $serviceStatus.failed}<p class="service-error" role="status">
 			Cannot refresh service checks. Previous results are stale.
 		</p>{/if}
+	{#if !embedded}<ServiceRouting />{/if}
 	{#each groups as group (group.id)}
 		{#if !embedded}<h3 class="service-group-heading">{group.name} <span>{group.ip}</span></h3>{/if}
 		<div class="service-grid">

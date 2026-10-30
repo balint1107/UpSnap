@@ -30,7 +30,7 @@ export const serviceStatus = writable<ServiceState>(
 			if (!stopped) set(value);
 		};
 		async function refresh() {
-			if (value.fetching) return;
+			if (value.fetching || !get(pocketbase).authStore.isValid) return;
 			publish({ fetching: true });
 			request = new AbortController();
 			try {
@@ -54,11 +54,16 @@ export const serviceStatus = writable<ServiceState>(
 		const visible = () => {
 			if (document.visibilityState === 'visible') trigger();
 		};
-		const timer = window.setInterval(visible, 30000);
+		const stopAuth = get(pocketbase).authStore.onChange(() => {
+   if (get(pocketbase).authStore.isValid) trigger();
+   else publish({services:[],failed:false});
+  });
+  const timer = window.setInterval(visible, 30000);
 		document.addEventListener('visibilitychange', visible);
 		trigger();
 		return () => {
 			stopped = true;
+   stopAuth();
 			trigger = () => {};
 			window.clearInterval(timer);
 			document.removeEventListener('visibilitychange', visible);

@@ -1,16 +1,25 @@
 package pb
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
 )
+
+// serviceRouteEntry carries only public link metadata from the trusted local routing controller.
+type serviceRouteEntry struct {
+	ID        string `json:"id"`
+	Route     string `json:"route"`
+	Canonical string `json:"canonical"`
+}
 
 type ServiceReading struct {
 	DeviceID  string    `json:"device_id"`
@@ -75,6 +84,23 @@ func HandlerServices(e *core.RequestEvent) error {
 			legacyIPs[device.Address] = device.ID
 		}
 	}
+	// Routing metadata is local and optional; a down controller must not hide status readings.
+	routes := map[string]serviceRouteEntry{}
+	if os.Getenv("UPSNAP_SERVICE_ROUTES_SOCKET") != "" {
+		ctx, cancel := context.WithTimeout(e.Request.Context(), 250*time.Millisecond)
+		status, data, routeErr := serviceRouteRequest(ctx, "GET", nil)
+		cancel()
+		if routeErr == nil && status == 200 {
+			var registry struct {
+				Services []serviceRouteEntry `json:"services"`
+			}
+			if json.Unmarshal(data, &registry) == nil {
+				for _, entry := range registry.Services {
+					routes[entry.ID] = entry
+				}
+			}
+		}
+	}
 	visible := make([]ServiceReading, 0, len(value.Services))
 	for _, service := range value.Services {
 		reference := service.DeviceID
@@ -84,6 +110,11 @@ func HandlerServices(e *core.RequestEvent) error {
 		device, ok := byID[reference]
 		if !ok {
 			continue
+		}
+		if route, ok := routes[service.ID]; ok && route.Route != "" {
+			if strings.HasPrefix(service.URL, "https://bgamgee.ddns.net"+route.Canonical) {
+				service.URL = "https://bgamgee.ddns.net" + route.Route + strings.TrimPrefix(service.URL, "https://bgamgee.ddns.net"+route.Canonical)
+			}
 		}
 		service.DeviceID = device.ID
 		service.HostName = device.Name

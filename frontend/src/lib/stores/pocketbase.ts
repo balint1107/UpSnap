@@ -12,4 +12,6 @@ pb.autoCancellation(false);
 
 // export stores
 export const pocketbase = writable(pb);
+// Set only after the configured proxy identity exchange succeeds.
+export const centralAuth = writable(false);
 export const permission = writable({} as Permission);

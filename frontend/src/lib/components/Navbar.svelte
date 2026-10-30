@@ -3,7 +3,7 @@
 	import { asset, resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { m } from '$lib/paraglide/messages';
-	import { backendUrl, permission, pocketbase } from '$lib/stores/pocketbase';
+	import { backendUrl, centralAuth, permission, pocketbase } from '$lib/stores/pocketbase';
 	import { settingsPub } from '$lib/stores/settings';
 	import {
 		faCheck,
@@ -34,11 +34,16 @@
 		});
 	});
 
+	/** End local and central sessions, preserving the current monitor URL for the next sign-in. */
 	async function logout() {
 		await $pocketbase.collection('devices').unsubscribe('*');
 		await $pocketbase.collection('ports').unsubscribe('*');
 		await $pocketbase.collection('permissions').unsubscribe('*');
 		$pocketbase.authStore.clear();
+        if ($centralAuth) {
+            window.location.assign(`/auth/logout?xrd=${encodeURIComponent(window.location.href)}`);
+            return;
+        }
 		goto(resolve('/login'), { invalidateAll: true });
 	}
 </script>
@@ -261,6 +266,7 @@
 							? $pocketbase.authStore.record?.email
 							: $pocketbase.authStore.record?.username}
 					</li>
+                    {#if $centralAuth}<li><a href="/auth/settings">Sign-in &amp; passkeys</a></li>{/if}
 					<li>
 						<a href={resolve('/account')}><Fa icon={faUserGear} />{m.navbar_edit_account()}</a>
 					</li>

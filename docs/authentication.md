@@ -151,3 +151,30 @@ and exact pinned host-key algorithm. RSA/ECDSA and group14-sha1 compatibility ar
 allowed only for configured legacy routers, never a fallback for computer hosts.
 MikroTik's `always-allow-password-login` is enabled so terminals remain usable
 alongside existing keys; its controller uses a separate limited-policy user.
+
+## Central Authelia deployment
+
+The home deployment now gates Monitor through Authelia. Optional `UPSNAP_SSO_FILE`
+contains a private proxy secret, explicit Authelia-username → existing regular-user
+ID bindings, and `admin_ids` for service administration. `GET /api/upsnap/sso`
+requires that secret and a bound identity and returns the existing user's ordinary
+PocketBase token. It never creates users, grants device permissions or maps emails
+implicitly. Ordinary direct browser-supplied headers fail authentication. nginx must
+overwrite identity headers and keep the backend restricted.
+
+The frontend exchanges verified identity before refreshing authentication. In central
+mode its account menu links to Authelia passkey settings, hides the independent
+Monitor password/passkey editors and ends the central session on logout. Existing
+Monitor credentials are preserved for recovery; central passkeys require enrollment.
+Terminal SSH credentials remain independent.
+
+Service-route administration uses a fixed filesystem-protected Unix socket via
+`UPSNAP_SERVICE_ROUTES_SOCKET`. Device control does not confer administration;
+only explicit administrator IDs or PocketBase superusers may call the management
+API. Changes are validated/applied by the host helper, not by a container Docker
+socket. See home-automation `docs/authelia.md` and `docs/service-access.md`.
+
+Central logout preserves the current Monitor URL through Authelia's `xrd` query
+parameter. After clearing the shared session, Authelia restores it to `rd` on the
+sign-in page so login returns to the same Monitor page rather than the global
+default destination. The destination is built from the current browser location.

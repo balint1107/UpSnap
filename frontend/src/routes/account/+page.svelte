@@ -6,7 +6,7 @@
 	import type { Locale } from '$lib/paraglide/runtime';
 	import { getLocale, locales, setLocale } from '$lib/paraglide/runtime';
 	import { localeStore } from '$lib/stores/locale';
-	import { backendUrl, pocketbase } from '$lib/stores/pocketbase';
+	import { backendUrl, centralAuth, pocketbase } from '$lib/stores/pocketbase';
 	import { faSave } from '@fortawesome/free-solid-svg-icons';
 	import { onMount } from 'svelte';
 	import Fa from 'svelte-fa';
@@ -144,7 +144,9 @@
 </script>
 
 <h1 class="mb-8 text-3xl font-bold">{m.account_page_title()}</h1>
-<PasskeySettings />
+{#if $centralAuth}
+<div class="card bg-base-200 mb-6 w-full shadow-sm"><div class="card-body"><a class="btn btn-sm w-fit" href="/auth/settings/two-factor-authentication">Manage sign-in &amp; passkeys</a></div></div>
+{:else}<PasskeySettings />{/if}
 <div class="card bg-base-200 w-full shadow-sm">
 	<div class="card-body">
 		<div class="flex flex-row items-center gap-4">
@@ -222,6 +224,7 @@
 		</form>
 	</div>
 </div>
+{#if !$centralAuth}
 <div class="card bg-base-200 mt-6 w-full shadow-sm">
 	<div class="card-body">
 		<h2 class="card-title">{m.account_change_password_title()}</h2>
@@ -288,3 +291,5 @@
 		</form>
 	</div>
 </div>
+
+{/if}

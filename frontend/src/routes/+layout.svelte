@@ -6,7 +6,7 @@
 	import Transition from '$lib/components/Transition.svelte';
 	import { m } from '$lib/paraglide/messages.js';
 	import { localeStore } from '$lib/stores/locale';
-	import { backendUrl, permission, pocketbase } from '$lib/stores/pocketbase';
+	import { backendUrl, centralAuth, permission, pocketbase } from '$lib/stores/pocketbase';
 	import { settingsPriv, settingsPub } from '$lib/stores/settings';
 	import type { Permission } from '$lib/types/permission';
 	import type { SettingsPrivate, SettingsPublic } from '$lib/types/settings';
@@ -16,6 +16,8 @@
 
 	let { children } = $props();
 	let authIsValid = $state(false);
+    let authReady = $state(false);
+    let authError = $state('');
 	let manifestHref = $state(
 		asset('/server-mark.svg').replace(/[^/]*$/, 'api/upsnap/manifest.webmanifest')
 	);
@@ -75,12 +77,28 @@
 
 		// redirect to welcome page if setup is not completed
 		if ($settingsPub.setup_completed === false) {
+            authReady = true;
 			$pocketbase.authStore.clear();
 			if (page.url.pathname !== '/welcome/') {
 				goto(resolve('/welcome'));
 			}
 			return;
 		}
+
+		// Exchange the proxy's verified identity for the existing account before refreshing.
+		const ssoResponse = await fetch(`${backendUrl}api/upsnap/sso`);
+		if (ssoResponse.ok) {
+			const result = await ssoResponse.json();
+            centralAuth.set(true);
+			$pocketbase.authStore.save(result.token, result.record);
+		} else if (ssoResponse.status !== 404) {
+			$pocketbase.authStore.clear();
+			authError = 'This login has no linked monitor account.';
+            toast.error(authError);
+			return;
+		}
+
+		authReady = true;
 
 		// refresh auth token
 		if ($pocketbase.authStore.isSuperuser) {
@@ -155,6 +173,6 @@
 
 <Transition url={page.url}>
 	<div class="container mx-auto mb-4 p-2">
-		{@render children()}
+		{#if authReady}{@render children()}{:else if authError}<p role="alert">{authError}</p>{:else}<p role="status">Loading…</p>{/if}
 	</div>
 </Transition>
