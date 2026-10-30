@@ -1,5 +1,9 @@
 # Server dashboard appearance
 
+Device detail refresh buttons are icon-only square controls. A device-specific
+accessible label and hover title identify the action; the button stays disabled
+while information is refreshing.
+
 The home-server fork uses neutral light/dark themes (`corporate` and `business`),
 a simple server mark and account icon, compact bordered cards, explicit SSH-ready
 and offline indicators, and accessible text buttons labelled Wake and Suspend.

@@ -282,11 +282,12 @@
 					})}
 				</span>
 				<button
-					class="btn btn-sm ms-auto"
+					class="btn btn-sm btn-square ms-auto"
 					disabled={refreshing}
 					aria-label="Refresh info for {device.name}"
+					title="Refresh info for {device.name}"
 					onclick={refreshDevice}
-					><Fa icon={faArrowsRotate} />{refreshing ? 'Refreshing…' : 'Refresh'}</button
+					><Fa icon={faArrowsRotate} /></button
 				>
 				{#if moreButtons.filter((btn) => btn.requires).length > 0}
 					<div class="flex flex-row flex-wrap gap-1">
