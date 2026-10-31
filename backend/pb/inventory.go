@@ -1,7 +1,10 @@
 package pb
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -150,6 +153,62 @@ func powerEnvelope(plug PowerDevice, collector string, access DeviceAccess, now 
 	return DeviceEnvelope{ID: deviceReference("appliance", plug.ID), Driver: "appliance", DriverID: plug.ID, Category: "home_appliances", Name: plug.Name, Address: plug.IP, CollectorDeviceID: collector, State: observationState(plug.Status, checked, now), CheckedAt: checked, Capabilities: []string{"power_metrics", "power_history"}, Permissions: DeviceAccess{Read: access.Read}}
 }
 
+// inventoryAppliances merges optional public definitions with observations at now (UTC).
+// Definitions in UPSNAP_APPLIANCES_FILE (default /app/ssh/appliances.json) own identity
+// and permission inheritance; snapshot-only legacy installs remain supported when absent.
+// A snapshot failure returns configured devices plus an error, without inventing readings.
+func inventoryAppliances(now time.Time) ([]PowerDevice, error) {
+	var snapshot PowerSnapshot
+	var snapshotErr error
+	if filename := os.Getenv("UPSNAP_SERVICES_FILE"); filename != "" {
+		snapshot, snapshotErr = readPowerSnapshot(filepath.Join(filepath.Dir(filename), "power.json"), now)
+	}
+	filename := os.Getenv("UPSNAP_APPLIANCES_FILE")
+	if filename == "" {
+		filename = "/app/ssh/appliances.json"
+	}
+	file, err := os.Open(filename)
+	if os.IsNotExist(err) {
+		return snapshot.Devices, snapshotErr
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	var defs []struct {
+		ID                string `json:"id"`
+		Name              string `json:"name"`
+		IP                string `json:"ip"`
+		CollectorDeviceID string `json:"collector_device_id"`
+	}
+	decoder := json.NewDecoder(io.LimitReader(file, 65537))
+	if decoder.Decode(&defs) != nil || len(defs) > 32 {
+		return nil, fmt.Errorf("invalid appliance definitions")
+	}
+	var extra any
+	if decoder.Decode(&extra) != io.EOF {
+		return nil, fmt.Errorf("invalid appliance definitions")
+	}
+	values := make([]PowerDevice, 0, len(defs))
+	seen := map[string]bool{}
+	for _, def := range defs {
+		if !routerIDPattern.MatchString(def.ID) || seen[def.ID] || def.Name == "" || net.ParseIP(def.IP) == nil || !strings.HasPrefix(def.CollectorDeviceID, "computer:") {
+			return nil, fmt.Errorf("invalid appliance definition")
+		}
+		seen[def.ID] = true
+		plug := PowerDevice{ID: def.ID, Name: def.Name, IP: def.IP, CollectorDeviceID: def.CollectorDeviceID}
+		for _, reading := range snapshot.Devices {
+			if reading.ID == def.ID {
+				plug = reading
+				break
+			}
+		}
+		plug.Name, plug.IP, plug.CollectorDeviceID = def.Name, def.IP, def.CollectorDeviceID
+		values = append(values, plug)
+	}
+	return values, snapshotErr
+}
+
 // deviceInventory returns authorized common records and per-driver errors without triggering SSH, WoL or device mutations.
 // One unavailable optional driver does not hide computer records or leak ungranted metadata.
 func deviceInventory(e *core.RequestEvent, now time.Time) ([]DeviceEnvelope, []string, error) {
@@ -188,21 +247,22 @@ func deviceInventory(e *core.RequestEvent, now time.Time) ([]DeviceEnvelope, []s
 			}
 		}
 	}
-	if filename := os.Getenv("UPSNAP_SERVICES_FILE"); filename != "" {
-		snapshot, err := readPowerSnapshot(filepath.Join(filepath.Dir(filename), "power.json"), now)
+	plugs, err := inventoryAppliances(now)
+	if err != nil {
+		failures = append(failures, "appliance")
+	}
+	for _, plug := range plugs {
+		host, err := inventoryHost(e.App, plug.CollectorDeviceID, plug.HostIP)
 		if err != nil {
-			failures = append(failures, "appliance")
-		} else {
-			for _, plug := range snapshot.Devices {
-				host, err := inventoryHost(e.App, plug.CollectorDeviceID, plug.HostIP)
-				if err != nil {
-					continue
-				}
-				permission := deviceAccess(e, host)
-				if permission.Read {
-					values = append(values, powerEnvelope(plug, deviceReference("computer", host.Id), permission, now))
-				}
+			continue
+		}
+		permission := deviceAccess(e, host)
+		if permission.Read {
+			common := powerEnvelope(plug, deviceReference("computer", host.Id), permission, now)
+			if plug.CheckedAt.IsZero() {
+				common.State = "unknown"
 			}
+			values = append(values, common)
 		}
 	}
 	return values, failures, nil

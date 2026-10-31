@@ -74,3 +74,35 @@ The account and grants were removed. Desktop/mobile rows and mobile service grou
 passed, with no horizontal overflow and the tools link available under Raspi. Hardware
 power/radio/LED settings were not changed. The previous executable is hard-linked at
 `monitor/build/upsnap.before-schema-20261026`; no database rewrite was needed.
+
+## Inventory-first dashboard
+
+All three device categories render from the authorized common inventory before
+live diagnostics complete. `DashboardDevice` adds optional driver observations
+and separate `refreshing`/`failed` flags to the existing envelope. Initial rows
+show known names/addresses and Checking/unknown readings; refreshing keeps rows
+and expanded router/appliance details in place. Failed reads retain observations
+with a stale indication. Inventory refresh replaces permissions and removes
+revoked devices; changing accounts clears observations and cancels pending reads.
+Computer records and resource probes remain separate from inventory assembly.
+
+`GET /api/upsnap/routers/{router}` reads one configured router independently,
+using the same permissions and 29-second cache as the legacy batch endpoint.
+`?refresh=1` retains a two-second minimum cache age. A per-router lock deduplicates
+probes and orders them against action readback; only short cache publication is
+shared across routers. Controls still serialize and return observed state.
+The Pi controller must support `router status <id>` before using this frontend.
+
+Optional `UPSNAP_APPLIANCES_FILE` (default `/app/ssh/appliances.json`) supplies
+public appliance definitions independently of `power.json`. Each entry contains
+`id`, `name`, `ip`, and `collector_device_id` (`computer:<record-id>`). Definitions
+own identity/permissions; absent or corrupt measurements leave configured rows
+unknown, with an appliance-driver warning. When the definitions file is absent,
+legacy snapshot-derived inventory still works. Invalid definitions fail closed.
+No credentials, controls, schema migration, or background hardware polling are added.
+
+The inventory-first build was deployed on 2026-10-31 with the matching Pi
+controller and public appliance definitions. Live API and deployed-browser checks
+confirmed eight device rows before delayed diagnostics, independent router updates,
+preserved expansion, anonymous denial and unchanged control grants. See the
+home-automation deployment guide for verification details and rollback location.

@@ -1,111 +1,35 @@
 <script lang="ts">
-	import { deviceCategories, type DeviceEnvelope } from '$lib/types/inventory';
+	import { deviceCategories, type Router } from '$lib/types/inventory';
+	import { deviceInventory, refreshDevice, controlRouter } from '$lib/stores/inventory';
 	import ServiceAvailability from './ServiceAvailability.svelte';
-	import { onMount } from 'svelte';
-	import { get } from 'svelte/store';
 	import { resolve } from '$app/paths';
-	import { backendUrl, pocketbase } from '$lib/stores/pocketbase';
 	import { faChevronDown, faTerminal } from '@fortawesome/free-solid-svg-icons';
 	import Fa from 'svelte-fa';
-	type Band = { id: string; name: string; on: boolean | null };
-	type Router = {
-		device: DeviceEnvelope;
-		id: string;
-		name: string;
-		ip: string;
-		model: string;
-		status: string;
-		bands: Band[];
-		leds: boolean | null;
-		led_control: boolean;
-		led_scope: string;
-		lcd: boolean;
-		lcd_on: boolean | null;
-		firmware: string;
-		uptime: string;
-		load: string[];
-		cpu: string | null;
-		memory_total: number | null;
-		memory_free: number | null;
-		checked_at: number;
-	};
 	let { search = '' }: { search?: string } = $props();
-	let routers: Router[] = $state([]);
-	let canControl = $state(false);
-	let failed = $state(false);
 	let pending = $state('');
 	let error = $state('');
-	let fetching = $state(false);
-	let abort: AbortController | undefined;
-	let requestVersion = 0;
 	const visible = $derived(
-		routers.filter((r) =>
-			`${r.name} ${r.ip} ${r.model}`.toLowerCase().includes(search.toLowerCase())
+		$deviceInventory.devices.filter(
+			(d) =>
+				d.driver === 'router' &&
+				`${d.name} ${d.address} ${d.router?.model ?? ''}`
+					.toLowerCase()
+					.includes(search.toLowerCase())
 		)
 	);
-	/** Fetch authenticated router diagnostics; force requests bypass the shared cache at most once every 2s. */
-	async function refresh(force = false) {
-		if (fetching || pending) return;
-		fetching = true;
-		const version = requestVersion;
-		abort = new AbortController();
-		try {
-			const response = await fetch(`${backendUrl}api/upsnap/routers${force ? '?refresh=1' : ''}`, {
-				headers: { Authorization: get(pocketbase).authStore.token },
-				signal: abort.signal
-			});
-			if (!response.ok) throw new Error('Networking unavailable');
-			const result = await response.json();
-			if (version !== requestVersion) return;
-			routers = result.routers;
-			canControl = result.can_control;
-			failed = false;
-		} catch (e) {
-			if (version === requestVersion && !(e instanceof DOMException && e.name === 'AbortError'))
-				failed = true;
-		} finally {
-			fetching = false;
-		}
-	}
-	/** Apply a supported on/off action to router id; update switches only from observed response, never optimistically. */
+	/** Apply the supported action to id with on/off and optional band; observed state comes from the authorized API. */
 	async function change(id: string, action: string, on: boolean, band = '') {
-		if (pending || !canControl) return;
+		if (pending) return;
 		pending = id;
-		requestVersion++;
 		error = '';
 		try {
-			const response = await fetch(`${backendUrl}api/upsnap/routers/${id}/${action}`, {
-				method: 'POST',
-				headers: {
-					Authorization: get(pocketbase).authStore.token,
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify({ value: on ? 'on' : 'off', band })
-			});
-			if (!response.ok) throw new Error('Switch failed; refresh to check actual state.');
-			const result = await response.json();
-			routers = routers.map((r) => (r.id === id ? result : r));
+			await controlRouter(id, action, on, band);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Router unavailable';
 		} finally {
 			pending = '';
 		}
 	}
-	/** Poll only while visible and cancel the current diagnostic read on navigation. */
-	onMount(() => {
-		/** Refresh router metadata after tab visibility returns; hidden tabs do not poll. */
-		const resume = () => {
-			if (document.visibilityState === 'visible') void refresh();
-		};
-		void refresh();
-		const timer = setInterval(resume, 30000);
-		document.addEventListener('visibilitychange', resume);
-		return () => {
-			clearInterval(timer);
-			document.removeEventListener('visibilitychange', resume);
-			abort?.abort();
-		};
-	});
 	/** Format nullable switch state; unknown remains explicit. */
 	function switchState(value: boolean | null) {
 		return value == null ? 'Unknown' : value ? 'On' : 'Off';
@@ -126,24 +50,36 @@
 <section class="networking" aria-label="Networking devices">
 	<h2>{deviceCategories.networking}</h2>
 	{#if error}<p role="alert">{error}</p>{/if}
-	{#if failed}<p role="status">Router diagnostics unavailable. Previous readings are stale.</p>{/if}
-	{#each visible as router (router.id)}
-		{@const ready = !failed && router.device.state === 'online'}
+	{#each visible as common (common.id)}
+		{@const router: Router = common.router ?? { device: common, id: common.driver_id, name: common.name, ip: common.address,
+            model: '', status: 'unknown', bands: [], leds: null, led_control: false, led_scope: '', lcd: common.capabilities.includes('lcd'),
+            lcd_on: null, firmware: '', uptime: '', load: [], cpu: null, memory_total: null, memory_free: null, checked_at: 0 }}
+		{@const failed = common.failed}
+		{@const ready = !!common.router && !failed && common.state === 'online'}
+		{@const canControl = common.permissions.control}
 		<details
 			class="server-card device-row bg-base-100 router-row"
-			data-router={router.id} data-inventory-id={router.device.id} data-category={router.device.category}
-			data-state={failed ? 'stale' : router.device.state}
+			data-router={router.id}
+			data-inventory-id={common.id}
+			data-category={common.category}
+			data-state={failed ? 'stale' : common.state}
 		>
 			<summary class="device-row-summary">
-				<span class="row-host-name">{router.name}</span><span class="row-host-ip">{router.ip}</span>
+				<span class="row-host-name">{common.name}</span><span class="row-host-ip"
+					>{common.address}</span
+				>
 				<span class="host-state"
-					>{pending === router.id
+					>{pending === common.id
 						? 'Updating…'
-						: failed || router.device.state === 'stale'
-							? 'Stale'
-							: ready
-								? 'SSH ready'
-								: 'Unavailable'}</span
+						: !common.router && !failed
+							? common.refreshing
+								? 'Checking…'
+								: 'Unknown'
+							: failed || common.state === 'stale'
+								? 'Stale'
+								: ready
+									? 'SSH ready'
+									: 'Unavailable'}</span
 				>
 				<span class="compact-metrics router-metrics"
 					><span
@@ -155,12 +91,12 @@
 								: '—'}</strong
 						></span
 					><span
-						>{router.lcd && !router.device.capabilities.includes('leds') ? 'LCD' : 'LED'}
+						>{router.lcd && !common.capabilities.includes('leds') ? 'LCD' : 'LED'}
 						<strong
 							>{ready
-								? router.lcd && !router.device.capabilities.includes('leds')
+								? router.lcd && !common.capabilities.includes('leds')
 									? switchState(router.lcd_on)
-									: router.device.capabilities.includes('leds')
+									: common.capabilities.includes('leds')
 										? switchState(router.leds)
 										: '—'
 								: '—'}</strong
@@ -171,7 +107,7 @@
 				<span class="row-terminal"
 					>{#if ready}<a
 							class="btn host-power host-icon-button"
-							href={resolve('/terminal') + `/?device=${router.id}`}
+							href={resolve(`/terminal?device=${router.id}`)}
 							aria-label={`Open terminal for ${router.name}`}
 							title="Terminal"
 							onclick={(e) => e.stopPropagation()}
@@ -181,17 +117,22 @@
 				<span class="row-chevron" aria-hidden="true"><Fa icon={faChevronDown} /></span>
 			</summary>
 			<div class="router-detail">
+				{#if failed}<p role="status">
+						Router diagnostics unavailable. Previous readings are stale.
+					</p>{/if}
 				<div class="router-heading">
 					<div>
 						<h3>{router.model}</h3>
 						<p>{router.firmware || 'Firmware unavailable'}</p>
 					</div>
-					<button class="btn btn-sm" onclick={() => refresh(true)} disabled={!!pending || fetching}
-						>Refresh</button
+					<button
+						class="btn btn-sm"
+						onclick={() => refreshDevice(common.id, true)}
+						disabled={!!pending || common.refreshing}>Refresh</button
 					>
 				</div>
 				<div class="router-controls">
-					{#each router.bands as band}<div class="switch-item">
+					{#each router.bands as band (band.id)}<div class="switch-item">
 							<span
 								>Wi-Fi · {band.name}<small>{ready ? switchState(band.on) : 'Unavailable'}</small
 								></span
@@ -202,15 +143,15 @@
 								aria-checked={band.on === true}
 								class="router-switch"
 								class:on={band.on === true}
-								disabled={!ready || !canControl || !!pending}
-								onclick={() => change(router.id, 'wifi', band.on !== true, band.id)}
+								disabled={!ready || !canControl || common.refreshing || !!pending}
+								onclick={() => change(common.id, 'wifi', band.on !== true, band.id)}
 								><span></span></button
 							>
 						</div>{/each}
 					<div class="switch-item">
 						<span
 							>LEDs<small
-								>{router.led_scope}{#if router.device.capabilities.includes('leds')}
+								>{router.led_scope}{#if common.capabilities.includes('leds')}
 									· {ready ? switchState(router.leds) : 'Unavailable'}{/if}</small
 							></span
 						><button
@@ -220,8 +161,12 @@
 							aria-checked={router.leds === true}
 							class="router-switch"
 							class:on={router.leds === true}
-							disabled={!ready || !canControl || !!pending || !router.device.capabilities.includes('leds')}
-							onclick={() => change(router.id, 'leds', router.leds !== true)}><span></span></button
+							disabled={!ready ||
+								!canControl ||
+								common.refreshing ||
+								!!pending ||
+								!common.capabilities.includes('leds')}
+							onclick={() => change(common.id, 'leds', router.leds !== true)}><span></span></button
 						>
 					</div>
 					{#if router.lcd}<div class="switch-item">
@@ -235,8 +180,8 @@
 								aria-checked={router.lcd_on === true}
 								class="router-switch"
 								class:on={router.lcd_on === true}
-								disabled={!ready || !canControl || !!pending}
-								onclick={() => change(router.id, 'lcd', router.lcd_on !== true)}
+								disabled={!ready || !canControl || common.refreshing || !!pending}
+								onclick={() => change(common.id, 'lcd', router.lcd_on !== true)}
 								><span></span></button
 							>
 						</div>{/if}
@@ -254,20 +199,16 @@
 					>
 				</div>
 				<p class="checked">
-					Checked {new Date(router.device.checked_at ?? 0).toLocaleString('en-GB', {
-						timeZone: 'Europe/Budapest'
-					})}{#if router.id === 'home-asus'}
+					{common.checked_at
+						? `Checked ${new Date(common.checked_at).toLocaleString('en-GB', { timeZone: 'Europe/Budapest' })}`
+						: 'Not yet checked'}{#if router.id === 'home-asus'}
 						· Wi-Fi state follows the configured radio policy.{/if}
 				</p>
 			</div>
-		<ServiceAvailability deviceId={router.device.id} embedded />
+			<ServiceAvailability deviceId={common.id} embedded />
 		</details>
 	{:else}<p>
-			{failed
-				? 'Networking access unavailable.'
-				: fetching
-					? 'Loading networking devices…'
-					: 'No matching networking devices.'}
+			{$deviceInventory.loaded ? 'No matching networking devices.' : 'Loading networking devices…'}
 		</p>{/each}
 </section>
 

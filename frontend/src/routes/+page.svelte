@@ -5,7 +5,8 @@
 	import DeviceCard from '$lib/components/DeviceCard.svelte';
 	import PowerDevices from '$lib/components/PowerDevices.svelte';
 	import RouterDevices from '$lib/components/RouterDevices.svelte';
-	import PageLoading from '$lib/components/PageLoading.svelte';
+	import PendingDeviceRow from '$lib/components/PendingDeviceRow.svelte';
+	import { deviceInventory, refreshInventory } from '$lib/stores/inventory';
 	import { m } from '$lib/paraglide/messages';
 	import { localeStore } from '$lib/stores/locale';
 	import { backendUrl, permission, pocketbase } from '$lib/stores/pocketbase';
@@ -21,7 +22,8 @@
 	import Fa from 'svelte-fa';
 	import toast from 'svelte-french-toast';
 
-	let loading = $state(true);
+	let computerFailed = $state(false);
+	const computers = $derived($deviceInventory.devices.filter((d) => d.driver === 'computer'));
 	let devices: Device[] = $state([]);
 	let orderBy: 'name' | 'ip' = $state('name');
 	let orderExpanded = $state(false);
@@ -62,10 +64,11 @@
 	$effect(() => {
 		filteredDevices = devices.filter(
 			(dev) =>
-				dev.ip.includes(searchQuery.toLowerCase()) ||
-				dev.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-				dev.mac.toLowerCase().includes(searchQuery.toLowerCase()) ||
-				dev.description.toLowerCase().includes(searchQuery.toLowerCase())
+				computers.some((common) => common.driver_id === dev.id) &&
+				(dev.ip.includes(searchQuery.toLowerCase()) ||
+					dev.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+					dev.mac.toLowerCase().includes(searchQuery.toLowerCase()) ||
+					dev.description.toLowerCase().includes(searchQuery.toLowerCase()))
 		);
 	});
 	$effect(() => {
@@ -91,19 +94,23 @@
 		}));
 	});
 
+	/** Load stored computer details independently of inventory; silent suppresses toast errors. Returns immediately. */
 	function getAllDevices(silent = false) {
 		const request = ++deviceRequest;
 		$pocketbase
 			.collection('devices')
 			.getFullList(-1, { sort: 'name', expand: 'ports,groups' })
 			.then((resp) => {
-				if (request === deviceRequest) devices = resp as Device[];
+				if (request === deviceRequest) {
+					devices = resp as Device[];
+					computerFailed = false;
+				}
 			})
 			.catch((err) => {
-				if (!silent && request === deviceRequest) toast.error(err.message);
-			})
-			.finally(() => {
-				if (request === deviceRequest) loading = false;
+				if (request === deviceRequest) {
+					computerFailed = true;
+					if (!silent) toast.error(err.message);
+				}
 			});
 	}
 
@@ -145,8 +152,20 @@
 		orderBy = (localStorage.getItem('orderBy') as 'name' | 'ip') || 'name';
 		orderByGroups = localStorage.getItem('orderByGroups') !== 'false';
 		getAllDevices();
+		let identity = $pocketbase.authStore.record?.id;
+		const stopAuth = $pocketbase.authStore.onChange(() => {
+			const next = $pocketbase.authStore.isValid ? $pocketbase.authStore.record?.id : undefined;
+			if (identity === next) return;
+			identity = next;
+			++deviceRequest;
+			devices = [];
+			if ($pocketbase.authStore.isValid) getAllDevices(true);
+		});
 		const subscriptions = ['devices', 'ports', 'permissions'].map((collection) =>
-			$pocketbase.collection(collection).subscribe('*', () => getAllDevices())
+			$pocketbase.collection(collection).subscribe('*', () => {
+				refreshInventory();
+				getAllDevices();
+			})
 		);
 		const refreshIfVisible = () => {
 			if (document.visibilityState === 'visible') getAllDevices(true);
@@ -155,6 +174,7 @@
 		document.addEventListener('visibilitychange', refreshIfVisible);
 		return () => {
 			++deviceRequest;
+			stopAuth();
 			window.clearInterval(timer);
 			document.removeEventListener('visibilitychange', refreshIfVisible);
 			subscriptions.forEach((subscription) =>
@@ -166,18 +186,16 @@
 
 <svelte:document onkeydown={handleShortcut} />
 
-{#if loading}
-	<PageLoading />
-{:else if devices.length > 0}
+{#if !$deviceInventory.loaded || $deviceInventory.devices.length > 0}
 	<div class="monitor-header">
 		<div>
 			<div class="monitor-eyebrow">Home infrastructure</div>
 			<h1>Devices</h1>
 		</div>
 		<div class="monitor-summary" aria-label="Computer status summary">
-			<span><strong>{devices.length}</strong> computers</span>
-			<span><strong>{devices.filter((d) => d.status === 'online').length}</strong> SSH ready</span>
-			<span><strong>{devices.filter((d) => d.status === 'offline').length}</strong> offline</span>
+			<span><strong>{computers.length}</strong> computers</span>
+			<span><strong>{computers.filter((d) => d.state === 'online').length}</strong> SSH ready</span>
+			<span><strong>{computers.filter((d) => d.state === 'offline').length}</strong> offline</span>
 		</div>
 	</div>
 	<div class="mb-4 flex flex-col justify-between gap-4 md:flex-row">
@@ -235,12 +253,26 @@
 		</div>
 	</div>
 	<h2 class="mb-3 text-lg font-semibold">{deviceCategories.computers}</h2>
+	{#if !$deviceInventory.loaded}<p role="status">Loading devices…</p>{/if}
+	<div class={gridClass}>
+		{#each computers.filter((d) => !devices.some((record) => record.id === d.driver_id) && `${d.name} ${d.address}`
+					.toLowerCase()
+					.includes(searchQuery.toLowerCase())) as common (common.id)}
+			<PendingDeviceRow device={common} failed={computerFailed} />
+		{/each}
+	</div>
 	{#if orderByGroups}
 		<div class="space-y-6">
 			{#if devicesWithoutGroups.length > 0}
 				<div class={gridClass}>
-					{#each devicesWithoutGroups as device, i (device.id)}
-						<DeviceCard bind:device={devicesWithoutGroups[i]} />
+					{#each devicesWithoutGroups as device (device.id)}
+						{@const common = computers.find((d) => d.driver_id === device.id)}
+						{#if common && devices.some((record) => record.id === device.id)}
+							<DeviceCard
+								{common}
+								bind:device={devices[devices.findIndex((d) => d.id === device.id)]}
+							/>
+						{/if}
 					{/each}
 				</div>
 			{/if}
@@ -261,7 +293,13 @@
 					</h1>
 					<div class={gridClass}>
 						{#each groupDevices as device (device.id)}
-							<DeviceCard bind:device={devices[devices.findIndex((d) => d.id === device.id)]} />
+							{@const common = computers.find((d) => d.driver_id === device.id)}
+							{#if common && devices.some((record) => record.id === device.id)}
+								<DeviceCard
+									{common}
+									bind:device={devices[devices.findIndex((d) => d.id === device.id)]}
+								/>
+							{/if}
 						{/each}
 					</div>
 				</div>
@@ -273,7 +311,13 @@
 			.sort((a, b) => a[orderBy].localeCompare(b[orderBy], $localeStore, { numeric: true }))}
 		<div class={gridClass}>
 			{#each sorted as device (device.id)}
-				<DeviceCard bind:device={devices[devices.findIndex((d) => d.id === device.id)]} />
+				{@const common = computers.find((d) => d.driver_id === device.id)}
+				{#if common && devices.some((record) => record.id === device.id)}
+					<DeviceCard
+						{common}
+						bind:device={devices[devices.findIndex((d) => d.id === device.id)]}
+					/>
+				{/if}
 			{/each}
 		</div>
 	{/if}
@@ -298,7 +342,13 @@
 	</div>
 {/if}
 
-{#if !loading}<RouterDevices search={searchQuery} /><PowerDevices search={searchQuery} />{/if}
+{#if $deviceInventory.failed}<p role="alert">
+		Device inventory unavailable. Previously loaded devices may be stale.
+	</p>{/if}
+{#if $deviceInventory.unavailableDrivers.length}<p role="status">
+		Some device information is unavailable. Existing readings may be stale.
+	</p>{/if}
+<RouterDevices search={searchQuery} /><PowerDevices search={searchQuery} />
 
 <dialog class="modal" bind:this={modalShutdownGroup}>
 	<div class="modal-box">

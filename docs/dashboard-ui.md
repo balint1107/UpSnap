@@ -335,3 +335,12 @@ Verification: seven numeric/window regression tests and the production build pas
 At 1440px and 390px, browser-only injected 26-hour-old and future outliers were
 excluded, all visible power points stayed within the plotting coordinates, and
 both chart clip IDs resolved independently. No hardware controls were used.
+
+Device sections now mount together and render common-inventory rows before
+computer details or router/power readings finish. Routers refresh independently,
+so one slow SSH target cannot hide its peers. Existing controls and specialized
+resource/power panels remain; unsampled controls stay disabled until observations
+are available. Unknown check times display “Not yet checked,” rather than 1970.
+Shared visible-tab polling deduplicates router/power reads and cancels pending
+work on navigation/account changes. See `device-schema.md` for the public appliance
+configuration and controller compatibility required for rollout.

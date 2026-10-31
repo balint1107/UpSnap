@@ -95,6 +95,7 @@ func StartPocketBase(distDirFS fs.FS) error {
 		se.Router.PUT("/api/upsnap/service-routes", HandlerServiceRoutes).Bind(apis.RequireAuth())
 		se.Router.GET("/api/upsnap/power", HandlerPower).Bind(apis.RequireAuth())
 		se.Router.GET("/api/upsnap/routers", HandlerRouters).Bind(apis.RequireAuth())
+		se.Router.GET("/api/upsnap/routers/{router}", HandlerRouters).Bind(apis.RequireAuth())
 		se.Router.POST("/api/upsnap/routers/{router}/{action}", HandlerRouterAction).Bind(apis.RequireAuth())
 		se.Router.GET("/api/upsnap/boot/{id}", HandlerBootStatus).Bind(RequireDeviceReadPermission())
 		se.Router.POST("/api/upsnap/boot/{id}/{action}", HandlerBootTarget).Bind(RequireUpSnapPermission())

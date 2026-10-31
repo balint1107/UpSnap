@@ -69,7 +69,6 @@ type RouterReading struct {
 var routerIDPattern = regexp.MustCompile(`^[a-z0-9-]{1,40}$`)
 var routerCache = struct {
 	sync.Mutex
-	At       time.Time
 	Values   []RouterReading
 	Snapshot atomic.Pointer[[]RouterReading]
 }{}
@@ -146,7 +145,66 @@ func routerCommand(ctx context.Context, args ...string) ([]byte, error) {
 	return out, nil
 }
 
-// HandlerRouters serves shared 30s diagnostics to Pi readers and reports whether control permission is granted.
+// routerReadLocks deduplicates probes per configured router while unrelated devices refresh independently.
+var routerReadLocks sync.Map
+var routerActionLock sync.Mutex
+
+// routerLock returns the shared probe/action lock for an allowlisted id; callers release it after use.
+func routerLock(id string) *sync.Mutex {
+	lock, _ := routerReadLocks.LoadOrStore(id, &sync.Mutex{})
+	return lock.(*sync.Mutex)
+}
+
+// publishRouterReading replaces one observation under a short lock and publishes an immutable inventory snapshot.
+// reading must be driver-owned and must not contain a caller-specific Device permission envelope.
+func publishRouterReading(reading RouterReading) {
+	routerCache.Lock()
+	defer routerCache.Unlock()
+	values := append([]RouterReading(nil), routerCache.Values...)
+	found := false
+	for i := range values {
+		if values[i].ID == reading.ID {
+			values[i] = reading
+			found = true
+			break
+		}
+	}
+	if !found {
+		values = append(values, reading)
+	}
+	routerCache.Values = values
+	routerCache.Snapshot.Store(&values)
+}
+
+// readRouter returns a shared observation for def, collecting only that router when stale.
+// ctx bounds SSH; force bypasses the 29s cache but retains a two-second minimum interval.
+// The per-router lock also prevents an earlier read from overwriting action readback.
+func readRouter(ctx context.Context, def RouterDefinition, force bool) (RouterReading, error) {
+	lock := routerLock(def.ID)
+	lock.Lock()
+	defer lock.Unlock()
+	for _, cached := range cachedRouterReadings() {
+		age := time.Since(time.Unix(cached.CheckedAt, 0))
+		if cached.ID == def.ID && age >= 0 && age < 29*time.Second && (!force || age < 2*time.Second) {
+			return cached, nil
+		}
+	}
+	out, err := routerCommand(ctx, "status", def.ID)
+	if err != nil {
+		return RouterReading{}, err
+	}
+	var reading RouterReading
+	if json.Unmarshal(out, &reading) != nil || reading.ID != def.ID {
+		return RouterReading{}, fmt.Errorf("invalid router diagnostics")
+	}
+	reading.Device = nil
+	publishRouterReading(reading)
+	return reading, nil
+}
+
+// HandlerRouters serves the legacy batch or one allowlisted router to authenticated Pi readers.
+// A router path parameter enables independent refresh; refresh=1 retains the bounded cache bypass.
+// Errors expose no controller stderr and action authorization remains separate.
 func HandlerRouters(e *core.RequestEvent) error {
 	e.Response.Header().Set("Cache-Control", "no-store")
 	if !routerPermission(e, false) {
@@ -156,44 +214,43 @@ func HandlerRouters(e *core.RequestEvent) error {
 	if err != nil {
 		return apis.NewApiError(503, "Router configuration unavailable.", nil)
 	}
-	if len(defs) == 0 {
-		return e.JSON(200, map[string]any{"routers": []RouterReading{}, "can_control": false})
+	id := e.Request.PathValue("router")
+	if id != "" {
+		var matched []RouterDefinition
+		for _, def := range defs {
+			if def.ID == id {
+				matched = append(matched, def)
+			}
+		}
+		if len(matched) == 0 {
+			return apis.NewNotFoundError("Router unavailable.", nil)
+		}
+		defs = matched
 	}
-	routerCache.Lock()
-	defer routerCache.Unlock()
-	force := e.Request.URL.Query().Get("refresh") == "1" && time.Since(routerCache.At) > 2*time.Second
-	if routerCache.Values == nil || time.Since(routerCache.At) >= 29*time.Second || force {
-		sampledAt := time.Now()
-		out, err := routerCommand(e.Request.Context(), "status")
-		if err != nil {
-			return apis.NewApiError(503, "Router diagnostics unavailable.", nil)
-		}
-		var result struct {
-			Routers []RouterReading `json:"routers"`
-		}
-		if json.Unmarshal(out, &result) != nil || len(result.Routers) > 8 {
-			return apis.NewApiError(503, "Invalid router diagnostics.", nil)
-		}
-		routerCache.Values = result.Routers
-		immutable := append([]RouterReading(nil), result.Routers...)
-		routerCache.Snapshot.Store(&immutable)
-		routerCache.At = sampledAt
+	values := make([]RouterReading, len(defs))
+	errors := make([]error, len(defs))
+	var workers sync.WaitGroup
+	for i, def := range defs {
+		workers.Add(1)
+		go func(i int, def RouterDefinition) {
+			defer workers.Done()
+			values[i], errors[i] = readRouter(e.Request.Context(), def, e.Request.URL.Query().Get("refresh") == "1")
+		}(i, def)
 	}
-	values := make([]RouterReading, 0, len(defs))
+	workers.Wait()
 	host, _ := collectorHost(e.App)
 	access := deviceAccess(e, host)
-	for _, def := range defs {
-		for _, cached := range routerCache.Values {
-			if def.ID != cached.ID {
-				continue
-			}
-			common := routerEnvelope(def, &cached, collectorReference(host), access, time.Now())
-			cached.Device = &common
-			values = append(values, cached)
-			break
+	for i := range values {
+		if errors[i] != nil {
+			return apis.NewApiError(503, "Router diagnostics unavailable.", nil)
 		}
+		common := routerEnvelope(defs[i], &values[i], collectorReference(host), access, time.Now())
+		values[i].Device = &common
 	}
-	return e.JSON(200, map[string]any{"routers": values, "can_control": routerPermission(e, true)})
+	if id != "" {
+		return e.JSON(200, values[0])
+	}
+	return e.JSON(200, map[string]any{"routers": values, "can_control": access.Control})
 }
 
 // validateRouterAction accepts only supported on/off switches and configured radio IDs; it never executes a command.
@@ -256,9 +313,18 @@ func HandlerRouterAction(e *core.RequestEvent) error {
 	if action == "wifi" {
 		args = append(args, body.Band)
 	}
-	routerCache.Lock()
-	defer routerCache.Unlock()
-	routerCache.At = time.Time{}
+	routerActionLock.Lock()
+	defer routerActionLock.Unlock()
+	lock := routerLock(target.ID)
+	lock.Lock()
+	defer lock.Unlock()
+	// Invalidate the prior observation before a control with an uncertain outcome.
+	for _, cached := range cachedRouterReadings() {
+		if cached.ID == target.ID {
+			cached.CheckedAt = 0
+			publishRouterReading(cached)
+		}
+	}
 	out, err := routerCommand(e.Request.Context(), args...)
 	if err != nil {
 		return apis.NewApiError(503, "Router operation failed; refresh to check state.", nil)
@@ -267,6 +333,8 @@ func HandlerRouterAction(e *core.RequestEvent) error {
 	if json.Unmarshal(out, &reading) != nil || reading.ID != target.ID {
 		return apis.NewApiError(503, "Router returned an invalid state.", nil)
 	}
+	reading.Device = nil
+	publishRouterReading(reading)
 	e.App.Logger().Info("Router control", "user", e.Auth.Id, "router", target.ID, "action", action, "state", body.Value)
 	host, _ := collectorHost(e.App)
 	if host != nil {

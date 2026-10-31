@@ -26,11 +26,11 @@
 	import DeviceMetrics from './DeviceMetrics.svelte';
 	import ServiceAvailability from './ServiceAvailability.svelte';
 	import { refreshServices, serviceStatus } from '$lib/stores/services';
-	import { deviceInventory } from '$lib/stores/inventory';
+	import type { DashboardDevice } from '$lib/types/inventory';
 	import { computerDeviceID } from '$lib/types/inventory';
 	import type { HostMetrics } from '$lib/types/metrics';
 
-	let { device = $bindable() }: { device: Device } = $props();
+	let { device = $bindable(), common }: { device: Device; common: DashboardDevice } = $props();
 	let expanded = $state(false);
 	let metrics: HostMetrics | undefined = $state();
 	let metricsFailed = $state(false);
@@ -67,7 +67,6 @@
 			refreshing = false;
 		}
 	}
-	const common = $derived($deviceInventory.devices.find((entry) => entry.id === computerDeviceID(device.id)));
 	const hostServices = $derived($serviceStatus.services.filter((s) => s.device_id === computerDeviceID(device.id)));
 	let modalReboot: HTMLDialogElement;
 	let modalRename: HTMLDialogElement;
@@ -175,7 +174,7 @@
 	bind:open={expanded}
 	data-device={device.name}
 	data-inventory-id={computerDeviceID(device.id)}
-	data-category={common?.category ?? 'computers'}
+	data-category={common.category}
 	data-state={device.status}
 >
 	<summary class="device-row-summary">
@@ -193,7 +192,7 @@
 		>
 		<DeviceMetrics {device} compact bind:metrics bind:failed={metricsFailed} />
 		<div class="row-power">
-			{#if common ? common.capabilities.includes('wake') || common.capabilities.includes('suspend') : !device.reboot_only}
+			{#if common.capabilities.includes('wake') || common.capabilities.includes('suspend')}
 				<DeviceCardNic bind:device compact powerUnavailable={bootPowerUnavailable} />
 			{/if}
 		</div>

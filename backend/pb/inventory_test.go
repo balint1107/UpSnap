@@ -220,3 +220,35 @@ func TestInventoryCacheDoesNotWaitForRouterSSH(t *testing.T) {
 		t.Fatal("missing independent snapshot")
 	}
 }
+
+// TestConfiguredAppliancesSurviveSnapshotFailure keeps authorized definitions visible when power.json is absent/corrupt.
+func TestConfiguredAppliancesSurviveSnapshotFailure(t *testing.T) {
+	app, user, host, hidden := inventoryFixture(t)
+	dir := t.TempDir()
+	t.Setenv("UPSNAP_SERVICES_FILE", filepath.Join(dir, "status.json"))
+	filename := filepath.Join(dir, "appliances.json")
+	t.Setenv("UPSNAP_APPLIANCES_FILE", filename)
+	defs := []map[string]string{
+		{"id": "visible", "name": "Plug", "ip": "192.0.2.1", "collector_device_id": deviceReference("computer", host.Id)},
+		{"id": "hidden", "name": "Private", "ip": "192.0.2.2", "collector_device_id": deviceReference("computer", hidden.Id)},
+	}
+	data, _ := json.Marshal(defs)
+	if err := os.WriteFile(filename, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	e := &core.RequestEvent{App: app, Auth: user}
+	for _, corrupt := range []bool{false, true} {
+		if corrupt {
+			if err := os.WriteFile(filepath.Join(dir, "power.json"), []byte("broken"), 0600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		values, failures, err := deviceInventory(e, time.Now())
+		if err != nil || !slices.Contains(failures, "appliance") {
+			t.Fatalf("missing partial failure: %v %v", failures, err)
+		}
+		if len(values) != 2 || values[1].ID != "appliance:visible" || values[1].State != "unknown" || values[1].CheckedAt != nil || values[1].Permissions.Control {
+			t.Fatalf("incorrect configured inventory: %+v", values)
+		}
+	}
+}
